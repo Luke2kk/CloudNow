@@ -106,9 +106,16 @@ struct StreamView: View {
         statusView(
             icon: "exclamationmark.triangle",
             title: "Stream Failed",
-            message: message,
+            message: entitlementMessage(from: message),
             color: .red
         )
+    }
+
+    private func entitlementMessage(from raw: String) -> String {
+        if raw.uppercased().contains("ENTITLEMENT") || raw.contains("3237093650") {
+            return "\(game.title) is not in your GeForce NOW library."
+        }
+        return raw
     }
 
     private func statusView(icon: String, title: String, message: String, color: Color) -> some View {

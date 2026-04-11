@@ -8,6 +8,8 @@ struct StoreView: View {
 
     @State private var selectedGame: GameInfo?
     @State private var showStream = false
+    @State private var notOwnedGame: GameInfo?
+    @State private var showNotOwned = false
 
     private let columns = [
         GridItem(.adaptive(minimum: 220, maximum: 260), spacing: 40)
@@ -30,6 +32,11 @@ struct StoreView: View {
                     .environment(authManager)
             }
         }
+        .alert("Not in Your Library", isPresented: $showNotOwned, presenting: notOwnedGame) { _ in
+            Button("OK") { }
+        } message: { game in
+            Text("\(game.title) is not in your GeForce NOW library. Add it via the GeForce NOW store on another device.")
+        }
     }
 
     private var gameGrid: some View {
@@ -37,8 +44,13 @@ struct StoreView: View {
             LazyVGrid(columns: columns, spacing: 40) {
                 ForEach(games) { game in
                     Button {
-                        selectedGame = game
-                        showStream = true
+                        if game.isInLibrary {
+                            selectedGame = game
+                            showStream = true
+                        } else {
+                            notOwnedGame = game
+                            showNotOwned = true
+                        }
                     } label: {
                         StoreCardLabel(game: game)
                     }
