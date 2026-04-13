@@ -47,6 +47,7 @@ struct SessionInfo {
     let signalingServer: String
     let signalingUrl: String
     let gpuType: String?
+    let queuePosition: Int?
     let iceServers: [IceServer]
     let mediaConnectionInfo: MediaConnectionInfo?
     let clientId: String

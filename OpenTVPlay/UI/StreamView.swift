@@ -1,5 +1,12 @@
 import SwiftUI
 
+private enum LoadingPhase: Equatable {
+    case finding
+    case inQueue(Int?)
+    case preparing
+    case timedOut
+}
+
 struct StreamView: View {
     let game: GameInfo
     var settings: StreamSettings = StreamSettings()
@@ -9,6 +16,9 @@ struct StreamView: View {
     @State private var streamController = GFNStreamController()
     @State private var showOverlay = false
     @State private var overlayTimer: Timer?
+    @State private var loadingPhase: LoadingPhase = .finding
+    @State private var createdSession: SessionInfo?
+    @State private var sessionToken: String?
 
     private let cloudMatchClient = CloudMatchClient()
 
@@ -44,15 +54,46 @@ struct StreamView: View {
 
     private var connectingView: some View {
         VStack(spacing: 24) {
-            ProgressView()
-                .scaleEffect(2)
-                .tint(.white)
+            if case .timedOut = loadingPhase {
+                Image(systemName: "clock.badge.xmark")
+                    .font(.system(size: 60))
+                    .foregroundStyle(.orange)
+            } else {
+                ProgressView()
+                    .scaleEffect(2)
+                    .tint(.white)
+            }
             Text("Starting \(game.title)…")
                 .font(.title2.weight(.semibold))
                 .foregroundStyle(.white)
-            Text("Connecting to a GeForce NOW server")
+            Text(loadingLabel)
                 .font(.body)
                 .foregroundStyle(.secondary)
+                .animation(.easeInOut, value: loadingPhase)
+            HStack(spacing: 24) {
+                if case .timedOut = loadingPhase {
+                    Button("Retry") { Task { await startSession() } }
+                        .buttonStyle(.bordered)
+                        .tint(.blue)
+                }
+                Button("Cancel") { disconnect() }
+                    .buttonStyle(.bordered)
+                    .tint(loadingPhase == .timedOut ? .red : .secondary)
+            }
+        }
+    }
+
+    private var loadingLabel: String {
+        switch loadingPhase {
+        case .finding:
+            return "Connecting to a GeForce NOW server…"
+        case .inQueue(let pos):
+            if let pos { return "In queue · Position \(pos)" }
+            return "In queue…"
+        case .preparing:
+            return "Preparing your game…"
+        case .timedOut:
+            return "Server took too long to respond."
         }
     }
 
@@ -145,8 +186,11 @@ struct StreamView: View {
     // MARK: Actions
 
     private func startSession() async {
+        loadingPhase = .finding
+        createdSession = nil
         do {
             let token = try await authManager.resolveToken()
+            sessionToken = token
             let provider = authManager.session?.provider
             let streamingBaseUrl = provider?.streamingServiceUrl ?? NVIDIAAuth.defaultStreamingUrl
             let base = streamingBaseUrl.hasSuffix("/") ? String(streamingBaseUrl.dropLast()) : streamingBaseUrl
@@ -164,10 +208,34 @@ struct StreamView: View {
             )
 
             var sessionInfo = try await cloudMatchClient.createSession(request)
+            createdSession = sessionInfo
 
-            // Poll until status == 2 (ready) or 3 (streaming)
-            var attempts = 0
-            while sessionInfo.status != 2 && sessionInfo.status != 3 && attempts < 60 {
+            // Poll with readyPollStreak confirmation (requires 2 consecutive ready polls)
+            // and a 90-second overall timeout to prevent infinite waiting.
+            var readyPollStreak = 0
+            let startTime = Date()
+
+            while readyPollStreak < 2 {
+                guard Date().timeIntervalSince(startTime) < 90 else {
+                    loadingPhase = .timedOut
+                    return
+                }
+
+                // Update loading phase
+                if let pos = sessionInfo.queuePosition, pos > 0 {
+                    loadingPhase = .inQueue(pos)
+                } else {
+                    loadingPhase = .preparing
+                }
+
+                if sessionInfo.status == 2 || sessionInfo.status == 3 {
+                    readyPollStreak += 1
+                } else {
+                    readyPollStreak = 0
+                }
+
+                if readyPollStreak >= 2 { break }
+
                 try await Task.sleep(for: .seconds(2))
                 sessionInfo = try await cloudMatchClient.pollSession(
                     sessionId: sessionInfo.sessionId,
@@ -177,7 +245,7 @@ struct StreamView: View {
                     clientId: sessionInfo.clientId,
                     deviceId: sessionInfo.deviceId
                 )
-                attempts += 1
+                createdSession = sessionInfo
             }
 
             await streamController.connect(session: sessionInfo)
@@ -187,6 +255,16 @@ struct StreamView: View {
     }
 
     private func disconnect() {
+        // Tell the server to stop the session so it doesn't linger
+        if let session = createdSession, let token = sessionToken {
+            Task {
+                try? await cloudMatchClient.stopSession(
+                    sessionId: session.sessionId,
+                    token: token,
+                    base: session.streamingBaseUrl
+                )
+            }
+        }
         streamController.disconnect()
         onDismiss()
     }

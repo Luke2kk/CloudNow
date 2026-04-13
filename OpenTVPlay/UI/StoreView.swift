@@ -10,6 +10,12 @@ struct StoreView: View {
     @State private var showStream = false
     @State private var notOwnedGame: GameInfo?
     @State private var showNotOwned = false
+    @State private var searchText = ""
+
+    private var filteredGames: [GameInfo] {
+        guard !searchText.isEmpty else { return games }
+        return games.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
+    }
 
     private let columns = [
         GridItem(.adaptive(minimum: 220, maximum: 260), spacing: 40)
@@ -20,12 +26,13 @@ struct StoreView: View {
             Color.black.ignoresSafeArea()
             if games.isEmpty && viewModel.isLoading {
                 ProgressView().scaleEffect(2).tint(.white)
-            } else if games.isEmpty {
+            } else if filteredGames.isEmpty {
                 emptyState
             } else {
                 gameGrid
             }
         }
+        .searchable(text: $searchText, prompt: "Search games")
         .fullScreenCover(isPresented: $showStream) {
             if let game = selectedGame {
                 StreamView(game: game, settings: viewModel.streamSettings, onDismiss: { showStream = false })
@@ -42,7 +49,7 @@ struct StoreView: View {
     private var gameGrid: some View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: 40) {
-                ForEach(games) { game in
+                ForEach(filteredGames) { game in
                     Button {
                         if game.isInLibrary {
                             selectedGame = game

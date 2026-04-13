@@ -309,6 +309,7 @@ actor CloudMatchClient {
             signalingServer: serverIp.contains(":") ? serverIp : "\(serverIp):443",
             signalingUrl: signalingUrl,
             gpuType: s.gpuType,
+            queuePosition: s.queuePosition,
             iceServers: iceServers,
             mediaConnectionInfo: media,
             clientId: clientId,

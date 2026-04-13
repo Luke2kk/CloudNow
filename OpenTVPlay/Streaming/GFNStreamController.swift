@@ -215,6 +215,11 @@ final class GFNStreamController: NSObject {
                 }
                 stats.codec = stat.values["codecId"] as? String ?? ""
                 stats.jitterMs = (stat.values["jitter"] as? Double ?? 0) * 1000
+                let lost = stat.values["packetsLost"] as? Double ?? 0
+                let received = stat.values["packetsReceived"] as? Double ?? 0
+                if lost + received > 0 {
+                    stats.packetLossPercent = lost / (lost + received) * 100
+                }
             }
             if stat.type == "candidate-pair", stat.values["state"] as? String == "succeeded" {
                 stats.rttMs = (stat.values["currentRoundTripTime"] as? Double ?? 0) * 1000
