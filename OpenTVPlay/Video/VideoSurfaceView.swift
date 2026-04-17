@@ -78,10 +78,10 @@ final class VideoSurfaceView: UIView {
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         var handled = false
         for press in presses {
-            if press.type == .menu {
-                // Intercept Menu before it reaches the system (which would open Control Center).
-                // Invoke the handler — GFNStreamController increments menuPressCount so SwiftUI
-                // can react via .onChange without relying on the tvOS focus engine.
+            if press.type == .playPause {
+                // Play/Pause toggles the HUD overlay. Unlike Menu, this button has no
+                // OS-level override, so marking it handled here fully suppresses system action.
+                // GFNStreamController increments menuPressCount so SwiftUI reacts via .onChange.
                 menuPressHandler?()
                 handled = true
             } else if let key = press.key, let mapping = Self.hidToKeyMapping[key.keyCode] {

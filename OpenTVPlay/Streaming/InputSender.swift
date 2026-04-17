@@ -323,7 +323,6 @@ final class InputSender {
     // Siri Remote state tracking
     private var lastMicroDpad: (x: Float, y: Float) = (0, 0)
     private var lastMicroButtonA = false
-    private var lastMicroButtonX = false
 
     // Heartbeat at ~0.5 Hz (every 120 frames) when no controllers are present
     private var heartbeatTick = 0
@@ -359,7 +358,6 @@ final class InputSender {
         remoteMode = (remoteMode == .mouse) ? .gamepad : .mouse
         lastMicroDpad = (0, 0)
         lastMicroButtonA = false
-        lastMicroButtonX = false
     }
 
     // MARK: Private — Tick
@@ -434,12 +432,9 @@ final class InputSender {
                 sendMouseButton(down: aPressed, button: 1)
             }
 
-            // Play/Pause → Escape (vk=0x1B, scancode=0x0001)
-            let xPressed = pad.buttonX.isPressed
-            if xPressed != lastMicroButtonX {
-                lastMicroButtonX = xPressed
-                sendKeyEvent(down: xPressed, vk: 0x1B, scancode: 0x0001, modifiers: 0)
-            }
+            // Play/Pause is handled by VideoSurfaceView (UIKit pressesBegan) as an overlay toggle.
+            // Do not forward it to the game from here to avoid double-firing.
+            _ = pad.buttonX.isPressed  // read to prevent GameController from coalescing
 
         case .gamepad:
             var buttons: UInt16 = 0
@@ -448,7 +443,7 @@ final class InputSender {
             if pad.dpad.left.isPressed  { buttons |= GFNInput.dpadLeft }
             if pad.dpad.right.isPressed { buttons |= GFNInput.dpadRight }
             if pad.buttonA.isPressed    { buttons |= GFNInput.buttonA }
-            if pad.buttonX.isPressed    { buttons |= GFNInput.start }
+            // buttonX (Play/Pause) is reserved for the overlay toggle — not forwarded to game
 
             let data = encoder.encodeGamepad(
                 controllerId: 0, buttons: buttons,
