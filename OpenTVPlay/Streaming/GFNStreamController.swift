@@ -208,7 +208,9 @@ final class GFNStreamController: NSObject {
         let serverMediaIp = session.mediaConnectionInfo.flatMap { Self.extractIpFromHost($0.ip) }
             ?? Self.extractIpFromHost(signaling?.connectedHost ?? "")
         let fixedSdp = serverMediaIp.map { ip in
-            sdp.replacingOccurrences(of: "c=IN IP4 0.0.0.0", with: "c=IN IP4 \(ip)")
+            sdp
+                .replacingOccurrences(of: "c=IN IP4 0.0.0.0", with: "c=IN IP4 \(ip)")
+                .replacingOccurrences(of: "c=IN IP4 127.0.0.1", with: "c=IN IP4 \(ip)")
         } ?? sdp
         if let ip = serverMediaIp {
             print("[Stream] Fixed c= lines in offer SDP: 0.0.0.0 → \(ip)")
@@ -256,7 +258,8 @@ final class GFNStreamController: NSObject {
             } catch {
                 print("[Stream] setLocalDescription failed: \(error)")
             }
-            signaling?.sendAnswer(sdp: mangledAnswerSdp, nvstSdp: buildNvstSdp())
+            let (iceUfrag, icePwd, dtlsFingerprint) = Self.extractIceCredentials(from: mangledAnswerSdp)
+            signaling?.sendAnswer(sdp: mangledAnswerSdp, nvstSdp: buildNvstSdp(iceUfrag: iceUfrag, icePwd: icePwd, dtlsFingerprint: dtlsFingerprint))
             signalingComplete = true
 
             // Inject the server's ICE host candidate AFTER sending the answer (matching OpenNOW timing).
@@ -273,37 +276,31 @@ final class GFNStreamController: NSObject {
                 return port
             }.first ?? 0
 
-            if let ip = mciIp, mciPort > 0 {
-                // Primary: mediaConnectionInfo (dedicated media server IP/port)
-                print("[ICE] Injecting server candidate (mediaConnectionInfo): \(ip):\(mciPort)")
-                let cand = LKRTCIceCandidate(
-                    sdp: "candidate:1 1 UDP 2130706431 \(ip) \(mciPort) typ host",
-                    sdpMLineIndex: 0, sdpMid: "0")
-                try? await pc.add(cand)
-            } else if sdpPort > 0 {
-                // Fallback: all DNS-resolved IPs at the SDP m-line port
-                let resolvedIps = signaling?.resolvedIPs ?? []
-                let connectedHost = signaling?.connectedHost ?? ""
-                var allIps = resolvedIps.isEmpty
-                    ? (connectedHost.isEmpty ? [] : [connectedHost])
-                    : resolvedIps
-                if !connectedHost.isEmpty, !allIps.contains(connectedHost) {
-                    allIps.append(connectedHost)
-                }
-                if allIps.isEmpty {
-                    print("[ICE] No server IPs available — ICE candidate injection skipped")
-                } else {
-                    print("[ICE] Injecting server candidates for \(allIps.count) IP(s) port=\(sdpPort) (signalingPool+sdpPort)")
-                    for (i, ip) in allIps.enumerated() {
-                        let cand = LKRTCIceCandidate(
-                            sdp: "candidate:\(i + 1) 1 UDP 2130706431 \(ip) \(sdpPort) typ host",
-                            sdpMLineIndex: 0, sdpMid: "0")
-                        try? await pc.add(cand)
-                        print("[ICE]   → \(ip):\(sdpPort)")
-                    }
-                }
+            // Saturate ICE with every plausible server endpoint.
+            // We don't know which port carries UDP media (usage=2 is absent for this zone),
+            // so we inject candidates for ALL combinations of known IPs × known ports.
+            // ICE probes them all simultaneously and succeeds on the first STUN reply.
+            let resolvedIps = signaling?.resolvedIPs ?? []
+            let connectedHost = signaling?.connectedHost ?? ""
+            var allIps: [String] = []
+            if let ip = mciIp { allIps.append(ip) }
+            for ip in resolvedIps where !allIps.contains(ip) { allIps.append(ip) }
+            if !connectedHost.isEmpty, !allIps.contains(connectedHost) { allIps.append(connectedHost) }
+
+            let allPorts = ([mciPort, sdpPort]).filter { $0 > 0 }
+            let pairs = allIps.flatMap { ip in allPorts.map { (ip, $0) } }
+
+            if pairs.isEmpty {
+                print("[ICE] No server IPs or ports available — ICE candidate injection skipped")
             } else {
-                print("[ICE] No server IP or SDP port available — ICE candidate injection skipped")
+                print("[ICE] Injecting \(pairs.count) candidate(s) (mciIp=\(mciIp ?? "nil") mciPort=\(mciPort) sdpPort=\(sdpPort))")
+                for (i, (ip, port)) in pairs.enumerated() {
+                    let cand = LKRTCIceCandidate(
+                        sdp: "candidate:\(i + 1) 1 UDP 2130706431 \(ip) \(port) typ host",
+                        sdpMLineIndex: 0, sdpMid: "0")
+                    try? await pc.add(cand)
+                    print("[ICE]   → \(ip):\(port)")
+                }
             }
         } catch {
             state = .failed(message: "Answer creation failed: \(error.localizedDescription)")
@@ -312,10 +309,59 @@ final class GFNStreamController: NSObject {
 
     // MARK: Private — NVST SDP
 
+    /// Extracts the client's ICE ufrag, ICE password, and DTLS fingerprint from an SDP string.
+    /// The GFN server reads these from the NVST SDP (not the WebRTC SDP) to validate STUN probes.
+    private static func extractIceCredentials(from sdp: String) -> (ufrag: String, pwd: String, fingerprint: String) {
+        let lines = sdp.components(separatedBy: CharacterSet.newlines)
+        let ufrag = lines.first { $0.hasPrefix("a=ice-ufrag:") }
+            .map { String($0.dropFirst("a=ice-ufrag:".count)).trimmingCharacters(in: .whitespaces) } ?? ""
+        let pwd = lines.first { $0.hasPrefix("a=ice-pwd:") }
+            .map { String($0.dropFirst("a=ice-pwd:".count)).trimmingCharacters(in: .whitespaces) } ?? ""
+        let fingerprint = lines.first { $0.hasPrefix("a=fingerprint:sha-256 ") }
+            .map { String($0.dropFirst("a=fingerprint:sha-256 ".count)).trimmingCharacters(in: .whitespaces) } ?? ""
+        return (ufrag, pwd, fingerprint)
+    }
+
     /// Builds the NVIDIA streaming protocol capability descriptor sent alongside the WebRTC answer.
-    /// Informs the server about audio/mic support and input data channel reliability settings.
-    private func buildNvstSdp() -> String {
-        var lines = [
+    /// Mirrors OpenNOW's buildNvstSdp() — critically includes the client's ICE credentials so the
+    /// GFN server can validate STUN MESSAGE-INTEGRITY on incoming binding requests.
+    private func buildNvstSdp(iceUfrag: String, icePwd: String, dtlsFingerprint: String) -> String {
+        let resolutionParts = settings.resolution.split(separator: "x")
+        let width  = Int(resolutionParts.first ?? "1920") ?? 1920
+        let height = Int(resolutionParts.last  ?? "1080") ?? 1080
+        let minBitrateKbps     = max(5000, settings.maxBitrateKbps * 35 / 100)
+        let initialBitrateKbps = max(minBitrateKbps, settings.maxBitrateKbps * 70 / 100)
+
+        var lines: [String] = [
+            "v=0",
+            "o=SdpTest test_id_13 14 IN IPv4 127.0.0.1",
+            "s=-",
+            "t=0 0",
+            // Client ICE credentials — GFN server uses these (not the WebRTC SDP) to validate STUN
+            "a=general.icePassword:\(icePwd)",
+            "a=general.iceUserNameFragment:\(iceUfrag)",
+            "a=general.dtlsFingerprint:\(dtlsFingerprint)",
+            // Video section with quality/bitrate hints for the server encoder
+            "m=video 0 RTP/AVP",
+            "a=msid:fbc-video-0",
+            "a=vqos.fec.rateDropWindow:10",
+            "a=vqos.fec.repairPercent:5",
+            "a=vqos.drc.enable:0",
+            "a=vqos.dfc.enable:0",
+            "a=video.enableRtpNack:1",
+            "a=video.packetSize:1140",
+            "a=bwe.useOwdCongestionControl:1",
+            "a=vqos.resControl.cpmRtc.enable:0",
+            "a=vqos.resControl.cpmRtc.minResolutionPercent:100",
+            "a=video.clientViewportWd:\(width)",
+            "a=video.clientViewportHt:\(height)",
+            "a=video.maxFPS:\(settings.fps)",
+            "a=video.initialBitrateKbps:\(initialBitrateKbps)",
+            "a=video.initialPeakBitrateKbps:\(settings.maxBitrateKbps)",
+            "a=vqos.bw.maximumBitrateKbps:\(settings.maxBitrateKbps)",
+            "a=vqos.bw.minimumBitrateKbps:\(minBitrateKbps)",
+            "a=vqos.bw.peakBitrateKbps:\(settings.maxBitrateKbps)",
+            "a=video.bitDepth:\(settings.colorQuality.bitDepth)",
             "m=audio 0 RTP/AVP",
             "a=msid:audio",
         ]
@@ -329,10 +375,11 @@ final class GFNStreamController: NSObject {
         lines += [
             "m=application 0 RTP/AVP",
             "a=msid:input_1",
-            "a=ri.partialReliableThresholdMs: \(partialReliableThresholdMs)",
-            "a=ri.hidDeviceMask: 0",
-            "a=ri.enablePartiallyReliableTransferGamepad: 65535",
-            "a=ri.enablePartiallyReliableTransferHid: 0",
+            "a=ri.partialReliableThresholdMs:\(partialReliableThresholdMs)",
+            "a=ri.hidDeviceMask:0",
+            "a=ri.enablePartiallyReliableTransferGamepad:\(protocolVersion == 3 ? 65535 : 0)",
+            "a=ri.enablePartiallyReliableTransferHid:0",
+            "",
         ]
         return lines.joined(separator: "\r\n")
     }
