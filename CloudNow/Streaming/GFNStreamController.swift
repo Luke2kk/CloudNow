@@ -177,7 +177,8 @@ final class GFNStreamController: NSObject {
         let client = GFNSignalingClient(
             signalingUrl: session.signalingUrl,
             sessionId: session.sessionId,
-            serverIp: session.serverIp
+            serverIp: session.serverIp,
+            resolution: settings.resolution
         )
         client.onEvent = { [weak self] event in
             Task { @MainActor [weak self] in self?.handleSignalingEvent(event) }

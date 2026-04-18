@@ -122,7 +122,9 @@ class GamesViewModel {
             // Non-fatal — fetch subscription tier and entitled resolutions
             if let userId = authManager.session?.user.userId {
                 let vpcId = (try? await MESClient.shared.fetchVpcId(token: token, base: base)) ?? ""
-                subscription = try? await MESClient.shared.fetchSubscription(token: token, vpcId: vpcId, userId: userId)
+                let sub = try? await MESClient.shared.fetchSubscription(token: token, vpcId: vpcId, userId: userId)
+                print("[MES] tier=\(sub?.membershipTier ?? "nil") resolutions=\(sub?.entitledResolutions.map(\.resolutionLabel) ?? [])")
+                subscription = sub
             }
         } catch {
             self.error = error.localizedDescription

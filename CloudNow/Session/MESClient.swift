@@ -28,11 +28,13 @@ actor MESClient {
     // MARK: Subscription Fetch
 
     func fetchSubscription(token: String, vpcId: String, userId: String) async throws -> SubscriptionInfo {
+        // Fall back to a known EU VPC if dynamic discovery failed — an empty vpcId returns degraded entitlements
+        let effectiveVpcId = vpcId.isEmpty ? "NP-AMS-08" : vpcId
         var comps = URLComponents(string: "https://mes.geforcenow.com/v4/subscriptions")!
         comps.queryItems = [
             URLQueryItem(name: "serviceName", value: "gfn_pc"),
             URLQueryItem(name: "languageCode", value: "en_US"),
-            URLQueryItem(name: "vpcId", value: vpcId),
+            URLQueryItem(name: "vpcId", value: effectiveVpcId),
             URLQueryItem(name: "userId", value: userId),
         ]
         guard let url = comps.url else {
@@ -102,6 +104,7 @@ private struct MESRawResponse: Decodable {
             let widthInPixels: Int
             let heightInPixels: Int
             let framesPerSecond: Int
+            let isEntitled: Bool?
         }
     }
 }
