@@ -1,46 +1,102 @@
 import SwiftUI
 
+private enum LibrarySortOrder: String, CaseIterable {
+    case `default`   = "Default"
+    case titleAZ     = "A → Z"
+    case titleZA     = "Z → A"
+    case recentFirst = "Recently Played"
+}
+
 struct LibraryView: View {
     let games: [GameInfo]
     let onPlay: (GameInfo) -> Void
 
     @Environment(GamesViewModel.self) var viewModel
 
+    @State private var searchText = ""
+    @State private var sortOrder: LibrarySortOrder = .default
+
     private let columns = [
         GridItem(.adaptive(minimum: 220, maximum: 260), spacing: 40)
     ]
 
-    var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            if games.isEmpty && viewModel.isLoading {
-                ScrollView {
-                    LazyVGrid(columns: columns, spacing: 40) {
-                        ForEach(0..<12, id: \.self) { _ in
-                            GameCardSkeleton()
-                        }
-                    }
-                    .padding(60)
-                }
-                .allowsHitTesting(false)
-            } else if games.isEmpty {
-                emptyState
-            } else {
-                gameGrid
+    private var filteredGames: [GameInfo] {
+        var result = searchText.isEmpty
+            ? games
+            : games.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
+        switch sortOrder {
+        case .default: break
+        case .titleAZ: result.sort { $0.title < $1.title }
+        case .titleZA: result.sort { $0.title > $1.title }
+        case .recentFirst:
+            let order = viewModel.recentlyPlayedIds
+            result.sort {
+                let li = order.firstIndex(of: $0.id) ?? Int.max
+                let ri = order.firstIndex(of: $1.id) ?? Int.max
+                return li < ri
             }
         }
+        return result
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                if games.isEmpty && viewModel.isLoading {
+                    ScrollView {
+                        LazyVGrid(columns: columns, spacing: 40) {
+                            ForEach(0..<12, id: \.self) { _ in
+                                GameCardSkeleton()
+                            }
+                        }
+                        .padding(60)
+                    }
+                    .allowsHitTesting(false)
+                } else if filteredGames.isEmpty {
+                    emptyState
+                } else {
+                    gameGrid
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Picker("Sort", selection: $sortOrder) {
+                            ForEach(LibrarySortOrder.allCases, id: \.self) { order in
+                                Text(order.rawValue).tag(order)
+                            }
+                        }
+                    } label: {
+                        Label("Sort", systemImage: "arrow.up.arrow.down")
+                    }
+                }
+            }
+        }
+        .searchable(text: $searchText, prompt: "Search library")
     }
 
     private var gameGrid: some View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: 40) {
-                ForEach(games) { game in
+                ForEach(filteredGames) { game in
                     Button {
                         onPlay(game)
                     } label: {
                         GameCardLabel(game: game)
                     }
                     .buttonStyle(.card)
+                    .contextMenu {
+                        Button {
+                            viewModel.toggleFavorite(game)
+                        } label: {
+                            let isFav = viewModel.favoriteIds.contains(game.id)
+                            Label(
+                                isFav ? "Remove from Favorites" : "Add to Favorites",
+                                systemImage: isFav ? "star.slash.fill" : "star"
+                            )
+                        }
+                    }
                 }
             }
             .padding(60)

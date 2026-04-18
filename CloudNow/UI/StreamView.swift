@@ -215,6 +215,16 @@ struct StreamView: View {
                 if !streamController.stats.gpuType.isEmpty {
                     Label(streamController.stats.gpuType, systemImage: "cpu")
                 }
+                if let sub = viewModel.subscription, !sub.isUnlimited, let rem = sub.remainingMinutes {
+                    Divider().overlay(.white.opacity(0.4))
+                    Label {
+                        Text(rem >= 60 ? "\(rem / 60)h \(rem % 60)m remaining" : "\(rem)m remaining")
+                    } icon: {
+                        Image(systemName: "clock")
+                            .foregroundStyle(rem < 30 ? .orange : .white.opacity(0.7))
+                    }
+                    .foregroundStyle(rem < 30 ? .orange : .white)
+                }
             }
             .font(.caption.weight(.medium))
             .foregroundStyle(.white)

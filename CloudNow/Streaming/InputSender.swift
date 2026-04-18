@@ -256,7 +256,7 @@ final class InputEncoder {
 
 // MARK: - GCController → XInput Mapping
 
-func mapGCControllerToXInput(_ controller: GCController) -> (
+func mapGCControllerToXInput(_ controller: GCController, deadzone: Float = 0.15) -> (
     buttons: UInt16, leftTrigger: UInt8, rightTrigger: UInt8,
     lx: Int16, ly: Int16, rx: Int16, ry: Int16
 ) {
@@ -286,17 +286,17 @@ func mapGCControllerToXInput(_ controller: GCController) -> (
     let rt = UInt8(clamping: Int(pad.rightTrigger.value * 255))
 
     // XInput Y axis is inverted (positive = up)
-    let lx = normalizeAxis(pad.leftThumbstick.xAxis.value)
-    let ly = normalizeAxis(-pad.leftThumbstick.yAxis.value)
-    let rx = normalizeAxis(pad.rightThumbstick.xAxis.value)
-    let ry = normalizeAxis(-pad.rightThumbstick.yAxis.value)
+    let lx = normalizeAxis(pad.leftThumbstick.xAxis.value, deadzone: deadzone)
+    let ly = normalizeAxis(-pad.leftThumbstick.yAxis.value, deadzone: deadzone)
+    let rx = normalizeAxis(pad.rightThumbstick.xAxis.value, deadzone: deadzone)
+    let ry = normalizeAxis(-pad.rightThumbstick.yAxis.value, deadzone: deadzone)
 
     return (buttons, lt, rt, lx, ly, rx, ry)
 }
 
-private func normalizeAxis(_ v: Float) -> Int16 {
+private func normalizeAxis(_ v: Float, deadzone: Float) -> Int16 {
     let clamped = max(-1.0, min(1.0, v))
-    if abs(clamped) < 0.15 { return 0 } // 15% deadzone
+    if abs(clamped) < deadzone { return 0 }
     return Int16(clamped < 0 ? clamped * 32768 : clamped * 32767)
 }
 
@@ -318,6 +318,9 @@ final class InputSender {
 
     /// Siri Remote input mode. Defaults to .mouse so the touchpad drives the cursor.
     private(set) var remoteMode: RemoteInputMode = .mouse
+
+    /// Radial deadzone for analog stick axes (0.0–1.0). Set from StreamSettings.controllerDeadzone.
+    var deadzone: Float = 0.15
 
     /// When true, Siri Remote and keyboard/mouse input is suppressed (e.g. while the HUD is visible).
     var isPaused = false
@@ -386,7 +389,7 @@ final class InputSender {
 
         // Extended gamepads — existing XInput encoding
         for (idx, controller) in extended.prefix(4).enumerated() {
-            let (btns, lt, rt, lx, ly, rx, ry) = mapGCControllerToXInput(controller)
+            let (btns, lt, rt, lx, ly, rx, ry) = mapGCControllerToXInput(controller, deadzone: deadzone)
             let data = encoder.encodeGamepad(
                 controllerId: idx,
                 buttons: btns,

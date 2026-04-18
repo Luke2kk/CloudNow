@@ -33,15 +33,18 @@ All source lives in `CloudNow/`. Five functional areas:
 - `GFNStreamController.swift` — `@Observable` WebRTC peer connection lifecycle. Opens the signaling WebSocket, negotiates SDP (server offer → munged answer), injects ICE candidates, attaches the video track, and collects live stats. Manages three data channels: `input_channel_v1` (reliable ordered), `input_channel_partially_reliable` (unordered, timed), and a server-opened `control_channel`. `InputSender` is started after receiving the server handshake on `input_channel_v1`.
 - `SignalingClient.swift` — Low-level WebSocket via `NWConnection` + `NWProtocolWebSocket`. Manages TLS options (cipher negotiation, cert bypass for GFN endpoints) and the JSON signaling message protocol.
 - `SDPMunger.swift` — Rewrites the SDP offer before sending: filters to preferred codec (H.264/H.265/AV1), clamps H.265 to Main profile, injects max bitrate.
-- `InputSender.swift` — Encodes GCController/keyboard/mouse/Siri Remote input into GFN binary protocol packets (XInput for gamepads; protocol v2 plain or v3 partially-reliable wrapping) and sends over the WebRTC data channel. Starts only after receiving the server handshake on `input_channel_v1`.
+- `InputSender.swift` — Encodes GCController/keyboard/mouse/Siri Remote input into GFN binary protocol packets (XInput for gamepads; protocol v2 plain or v3 partially-reliable wrapping) and sends over the WebRTC data channel. Starts only after receiving the server handshake on `input_channel_v1`. Configurable analog stick deadzone via `deadzone: Float` property (set from `StreamSettings.controllerDeadzone`).
 
 ### Video
 - `VideoSurfaceView.swift` — `UIView` backed by `AVSampleBufferDisplayLayer` that receives decoded WebRTC frames via a `WebRTCFrameRenderer` (CVPixelBuffer → CMSampleBuffer). Also acts as first responder for hardware keyboard and Bluetooth mouse input, forwarding events to `InputSender` as GFN protocol packets.
 
 ### UI (SwiftUI)
 - `MainTabView.swift` — Root tab bar (Home / Library / Store / Settings).
-- `StreamView.swift` — Full-screen player. Menu button toggles live stats overlay (bitrate, resolution, FPS, RTT, packet loss %).
+- `StreamView.swift` — Full-screen player. Menu button toggles pause menu with live stats (bitrate, resolution, FPS, RTT, packet loss %, remaining session time for Free/Priority tier).
 - `HomeView.swift` — Hero banner, "Continue Playing" row (active sessions), Favorites row.
+- `LibraryView.swift` — Library grid with search, A→Z/Z→A/Recently Played sort, and long-press context menus for Favorites.
+- `StoreView.swift` — Full catalog grid with search, store filter chips, and long-press context menus for owned games.
+- `SettingsView.swift` — Stream quality (resolution, FPS, codec, color, keyboard layout, game language, L4S), controller deadzone slider, zone picker, microphone toggle, account info.
 - `QueueAdPlayerView.swift` — AVPlayer-based queue ad playback; reports lifecycle events to CloudMatch.
 - `LoginView.swift` — Displays a QR code and PIN for NVIDIA device flow login; user scans the QR code or visits the URL on any device to complete OAuth.
 

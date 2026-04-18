@@ -16,17 +16,17 @@ A native GeForce NOW client for Apple TV. Stream your entire PC game library dir
 
 - **Tab bar navigation** — Home, Library, Store, and Settings; fully focus-engine compatible
 - **Home screen** — "Continue Playing" row powered by live active sessions, plus a Favorites row
-- **Library & Store** — browse your linked games separately from the full public catalog; Store has search
-- **Stream quality settings** — resolution up to 4K (tier-dependent), frame rate, codec (H.264/H.265/AV1), and color quality (SDR/HDR) from the Settings tab
+- **Library & Store** — browse your linked games separately from the full public catalog; Library and Store both have search; Library supports A→Z, Z→A, and Recently Played sort orders; long-press any card to add/remove from Favorites
+- **Stream quality settings** — resolution up to 4K (tier-dependent), frame rate, codec (H.264/H.265/AV1), color quality (SDR/HDR), keyboard layout, game language, and Low Latency Mode (L4S) from the Settings tab
 - **Codec-aware SDP negotiation** — offer is filtered to your chosen codec before WebRTC negotiation; H.265 prefers Main profile; bandwidth hints sent to prevent server overshoot
 - **Session queue UI** — shows queue phase ("In queue · Position X" → "Preparing your game"); waits indefinitely in queue with position updates; 180-second setup timeout after queue clears; requires two consecutive ready polls before presenting the stream; plays mandatory queue ads via AVPlayer and reports lifecycle events back to CloudMatch
 - **Zone/region selection** — Settings → Server Region shows live queue depths and ping per zone; Automatic mode picks the best zone by weighted score (40% ping + 60% queue depth); powered by the PrintedWaste community API
 - **Microphone support** — voice chat via AirPods or any Bluetooth headset; toggle in Settings; permission requested on first use
-- **Favorites** — heart any game in your Library; persisted locally
+- **Favorites** — long-press any game card in Library or Store to add/remove from Favorites; persisted locally
 - **Full GFN streaming** — WebRTC-based, up to 4K@60fps or 1080p@120fps depending on your GFN plan
-- **Controller support** — up to 4 simultaneous MFi/Xbox/PlayStation controllers via the GameController framework
+- **Controller support** — up to 4 simultaneous MFi/Xbox/PlayStation controllers via the GameController framework; configurable analog stick deadzone (5–30%)
 - **NVIDIA OAuth login** — device flow; TV shows a QR code and PIN; complete sign-in on any phone, tablet, or computer
-- **Live stats overlay** — bitrate, resolution, FPS, RTT, real packet loss % — toggle with the Play/Pause button
+- **Live stats overlay** — bitrate, resolution, FPS, RTT, real packet loss %, and remaining session time (Free/Priority tier) — toggle with the Play/Pause button
 - **Keychain persistence** — session tokens stored securely and auto-refreshed on launch
 
 ## Requirements

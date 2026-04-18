@@ -12,6 +12,8 @@ struct StreamSettings: Codable, Equatable {
     var gameLanguage: String = "en_US"
     var enableL4S: Bool = false
     var micEnabled: Bool = false
+    /// Radial deadzone applied to analog stick axes (0.0–1.0). Default 15%.
+    var controllerDeadzone: Double = 0.15
     /// Preferred zone URL, e.g. "https://np-aws-us-n-virginia-1.cloudmatchbeta.nvidiagrid.net/"
     /// nil = let the GFN default VPC handle routing.
     var preferredZoneUrl: String? = nil

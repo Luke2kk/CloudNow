@@ -35,6 +35,37 @@ struct SettingsView: View {
                             Text(colorQualityLabel(q)).tag(q)
                         }
                     }
+
+                    Picker("Keyboard Layout", selection: $vm.streamSettings.keyboardLayout) {
+                        Text("English (US)").tag("en-US")
+                        Text("English (UK)").tag("en-GB")
+                        Text("French").tag("fr-FR")
+                        Text("German").tag("de-DE")
+                        Text("Spanish").tag("es-ES")
+                        Text("Italian").tag("it-IT")
+                        Text("Portuguese (Brazil)").tag("pt-BR")
+                        Text("Hindi (India)").tag("hi-IN")
+                        Text("Japanese").tag("ja-JP")
+                        Text("Korean").tag("ko-KR")
+                    }
+
+                    Picker("Game Language", selection: $vm.streamSettings.gameLanguage) {
+                        Text("English (US)").tag("en_US")
+                        Text("English (UK)").tag("en_GB")
+                        Text("French").tag("fr_FR")
+                        Text("German").tag("de_DE")
+                        Text("Spanish").tag("es_ES")
+                        Text("Italian").tag("it_IT")
+                        Text("Portuguese").tag("pt_BR")
+                        Text("Hindi").tag("hi_IN")
+                        Text("Japanese").tag("ja_JP")
+                        Text("Korean").tag("ko_KR")
+                    }
+
+                    Toggle("Low Latency Mode (L4S)", isOn: $vm.streamSettings.enableL4S)
+                    Text("Reduces buffering on networks with L4S support (requires a compatible router and ISP).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("Server Region") {
@@ -70,7 +101,13 @@ struct SettingsView: View {
                 }
 
                 Section("Controller") {
-                    LabeledContent("Deadzone", value: "15% (default)")
+                    LabeledContent("Deadzone") {
+                        Text("\(Int(vm.streamSettings.controllerDeadzone * 100))%")
+                    }
+                    Slider(value: $vm.streamSettings.controllerDeadzone, in: 0.05...0.30, step: 0.01)
+                    Text("Increase if your controller drifts at rest. Default: 15%.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     LabeledContent("Protocol", value: "XInput v2/v3")
                 }
 

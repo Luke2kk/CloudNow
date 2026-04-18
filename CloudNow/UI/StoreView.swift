@@ -89,6 +89,19 @@ struct StoreView: View {
                             StoreCardLabel(game: game)
                         }
                         .buttonStyle(.card)
+                        .contextMenu {
+                            if game.isInLibrary {
+                                Button {
+                                    viewModel.toggleFavorite(game)
+                                } label: {
+                                    let isFav = viewModel.favoriteIds.contains(game.id)
+                                    Label(
+                                        isFav ? "Remove from Favorites" : "Add to Favorites",
+                                        systemImage: isFav ? "star.slash.fill" : "star"
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
                 .padding(60)

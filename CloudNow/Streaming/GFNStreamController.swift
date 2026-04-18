@@ -754,6 +754,7 @@ extension GFNStreamController: LKRTCDataChannelDelegate {
             print("[DataChannel] Input ready — starting InputSender (protocol v\(version))")
             let sender = InputSender(channel: self)
             sender.setProtocolVersion(version)
+            sender.deadzone = Float(self.settings.controllerDeadzone)
             sender.start()
             self.inputSender = sender
             // Forward keyboard/mouse events from the video surface to the sender
