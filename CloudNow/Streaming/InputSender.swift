@@ -40,12 +40,14 @@ private enum GFNInput {
     static let buttonY: UInt16   = 0x8000
 }
 
-// MARK: - Remote Input Mode
+// MARK: - Remote Input Mode (tvOS / Siri Remote only)
 
+#if os(tvOS)
 enum RemoteInputMode {
     case mouse
     case gamepad
 }
+#endif
 
 // MARK: - Input Event Handler
 
@@ -312,12 +314,13 @@ protocol DataChannelSender: AnyObject {
 /// Monitors connected GCControllers and keyboard/mouse events; sends encoded input
 /// over a WebRTC data channel at 60 Hz.
 final class InputSender {
+    #if os(tvOS)
     /// Pixel delta applied per unit of Siri Remote axis deflection per 60 Hz frame.
-    /// Tune this if the cursor feels too fast or too slow.
     static let remoteSensitivity: Float = 250.0
 
     /// Siri Remote input mode. Defaults to .mouse so the touchpad drives the cursor.
     private(set) var remoteMode: RemoteInputMode = .mouse
+    #endif
 
     /// Radial deadzone for analog stick axes (0.0–1.0). Set from StreamSettings.controllerDeadzone.
     var deadzone: Float = 0.15
@@ -334,9 +337,11 @@ final class InputSender {
     // Gamepad bitmap: bit i = extended gamepad i is connected (matches official GFN protocol)
     private var gamepadBitmap: UInt8 = 0
 
+    #if os(tvOS)
     // Siri Remote state tracking
     private var lastMicroDpad: (x: Float, y: Float) = (0, 0)
     private var lastMicroButtonA = false
+    #endif
 
     init(channel: DataChannelSender) {
         self.channel = channel
@@ -370,6 +375,7 @@ final class InputSender {
         encoder.setProtocolVersion(v)
     }
 
+    #if os(tvOS)
     // MARK: Remote Mode
 
     func toggleRemoteMode() {
@@ -377,15 +383,20 @@ final class InputSender {
         lastMicroDpad = (0, 0)
         lastMicroButtonA = false
     }
+    #endif
 
     // MARK: Private — Tick
 
     private func tick() {
         let controllers = GCController.controllers()
         let extended = controllers.filter { $0.extendedGamepad != nil }
-        let micro    = controllers.filter { $0.extendedGamepad == nil && $0.microGamepad != nil }
 
+        #if os(tvOS)
+        let micro = controllers.filter { $0.extendedGamepad == nil && $0.microGamepad != nil }
         if extended.isEmpty && micro.isEmpty { return }
+        #else
+        if extended.isEmpty { return }
+        #endif
 
         // Extended gamepads — existing XInput encoding
         for (idx, controller) in extended.prefix(4).enumerated() {
@@ -404,12 +415,15 @@ final class InputSender {
             channel?.sendData(data)
         }
 
+        #if os(tvOS)
         // Siri Remote — handle only when not paused
         if !isPaused, let remote = micro.first {
             handleMicroGamepad(remote)
         }
+        #endif
     }
 
+    #if os(tvOS)
     private func handleMicroGamepad(_ controller: GCController) {
         guard let pad = controller.microGamepad else { return }
 
@@ -465,6 +479,7 @@ final class InputSender {
             channel?.sendData(data)
         }
     }
+    #endif
 
     // MARK: Private — Controller Notifications
 
