@@ -10,6 +10,9 @@ import SwiftUI
 @main
 struct CloudNowApp: App {
     @State private var authManager = AuthManager()
+    /// Owned here so it can be injected into both WindowGroup and ImmersiveSpace (visionOS),
+    /// sharing the same instance (pendingGame visibility). On tvOS this is the single owner too.
+    @State private var viewModel = GamesViewModel()
     #if os(visionOS)
     /// Drives the ImmersiveSpace immersion level. Seeded from AppStorage on launch;
     /// the user can also toggle between .full and .mixed with the Digital Crown at runtime.
@@ -27,6 +30,7 @@ struct CloudNowApp: App {
                 }
             }
             .environment(authManager)
+            .environment(viewModel)
             .task { await authManager.initialize() }
             #if os(visionOS)
             .task {
@@ -42,6 +46,7 @@ struct CloudNowApp: App {
         ImmersiveSpace(id: "stream") {
             ImmersiveStreamView()
                 .environment(authManager)
+                .environment(viewModel)
         }
         .immersionStyle(selection: $immersionStyle, in: .full, .mixed)
         #endif
