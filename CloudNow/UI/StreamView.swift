@@ -363,12 +363,51 @@ struct StreamView: View {
         // Reset stream controller (handles retry from failed/disconnected state)
         streamController.disconnect()
 
-        // Direct reconnect path — session is still live, skip CloudMatch and re-attach WebRTC.
+        // Reconnect path — RESUME PUT tells the server to rebuild its media endpoint,
+        // then connect WebRTC as soon as we get a single status 2/3 (no double-poll wait).
         if let direct = directSession {
             loadingPhase = .preparing
-            createdSession = direct
-            viewModel.recordPlayed(game)
-            await streamController.connect(session: direct, settings: settings)
+            do {
+                let token = try await authManager.resolveToken()
+                sessionToken = token
+                let provider = authManager.session?.provider
+                let streamingBaseUrl = provider?.streamingServiceUrl ?? NVIDIAAuth.defaultStreamingUrl
+                let base = streamingBaseUrl.hasSuffix("/") ? String(streamingBaseUrl.dropLast()) : streamingBaseUrl
+
+                var sessionInfo = try await cloudMatchClient.claimSession(
+                    sessionId: direct.sessionId,
+                    serverIp: direct.serverIp,
+                    token: token,
+                    base: base,
+                    settings: settings
+                )
+                createdSession = sessionInfo
+
+                // Poll until ready, but only need a single status 2/3 (server media is up).
+                let timeout: TimeInterval = 60
+                let start = Date()
+                while sessionInfo.status != 2 && sessionInfo.status != 3 {
+                    if Date().timeIntervalSince(start) > timeout {
+                        loadingPhase = .timedOut
+                        return
+                    }
+                    try await Task.sleep(for: .seconds(2))
+                    sessionInfo = try await cloudMatchClient.pollSession(
+                        sessionId: sessionInfo.sessionId,
+                        token: token,
+                        base: sessionInfo.streamingBaseUrl,
+                        serverIp: sessionInfo.serverIp.isEmpty ? nil : sessionInfo.serverIp,
+                        clientId: sessionInfo.clientId,
+                        deviceId: sessionInfo.deviceId
+                    )
+                    createdSession = sessionInfo
+                }
+
+                viewModel.recordPlayed(game)
+                await streamController.connect(session: sessionInfo, settings: settings)
+            } catch {
+                streamController.fail(with: error.localizedDescription)
+            }
             return
         }
 
