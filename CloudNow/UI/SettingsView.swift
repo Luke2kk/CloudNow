@@ -62,6 +62,26 @@ struct SettingsView: View {
                         Text("Korean").tag("ko_KR")
                     }
 
+                    LabeledContent("Max Bitrate") {
+                        HStack(spacing: 16) {
+                            Button {
+                                vm.streamSettings.maxBitrateKbps = max(15_000, vm.streamSettings.maxBitrateKbps - 5_000)
+                            } label: {
+                                Image(systemName: "minus.circle")
+                            }
+                            .buttonStyle(.plain)
+                            Text("\(vm.streamSettings.maxBitrateKbps / 1000) Mbps")
+                                .monospacedDigit()
+                                .frame(minWidth: 72)
+                            Button {
+                                vm.streamSettings.maxBitrateKbps = min(100_000, vm.streamSettings.maxBitrateKbps + 5_000)
+                            } label: {
+                                Image(systemName: "plus.circle")
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
                     Toggle("Low Latency Mode (L4S)", isOn: $vm.streamSettings.enableL4S)
                     Text("Reduces buffering on networks with L4S support (requires a compatible router and ISP).")
                         .font(.caption)
