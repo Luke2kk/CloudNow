@@ -59,7 +59,7 @@ struct HomeView: View {
         .onAppear {
             Task { await viewModel.refreshActiveSessions(authManager: authManager) }
         }
-        .task(id: viewModel.resumableSession?.sessionId) {
+        .task(id: viewModel.resumableSession?.session.sessionId) {
             guard viewModel.resumableSession != nil else { return }
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
