@@ -302,11 +302,10 @@ func mapGCControllerToXInput(_ controller: GCController, deadzone: Float = 0.15)
     let lt = UInt8(clamping: Int(pad.leftTrigger.value * 255))
     let rt = UInt8(clamping: Int(pad.rightTrigger.value * 255))
 
-    // XInput Y axis is inverted (positive = up)
     let lx = normalizeAxis(pad.leftThumbstick.xAxis.value, deadzone: deadzone)
-    let ly = normalizeAxis(-pad.leftThumbstick.yAxis.value, deadzone: deadzone)
+    let ly = normalizeAxis(pad.leftThumbstick.yAxis.value, deadzone: deadzone)
     let rx = normalizeAxis(pad.rightThumbstick.xAxis.value, deadzone: deadzone)
-    let ry = normalizeAxis(-pad.rightThumbstick.yAxis.value, deadzone: deadzone)
+    let ry = normalizeAxis(pad.rightThumbstick.yAxis.value, deadzone: deadzone)
 
     return (buttons, lt, rt, lx, ly, rx, ry)
 }
@@ -517,6 +516,12 @@ final class InputSender {
         }
         observations = [connectObs, disconnectObs, mouseConnectObs, mouseDisconnectObs]
         GCController.startWirelessControllerDiscovery()
+
+        // Seed gamepadBitmap for controllers already connected before InputSender started
+        for controller in GCController.controllers() where controller.extendedGamepad != nil {
+            let idx = GCController.controllers().firstIndex(where: { $0 === controller }) ?? 0
+            gamepadBitmap |= (1 << UInt8(idx & 3))
+        }
 
         // Wire up any mice already connected at start time
         for mouse in GCMouse.mice() {

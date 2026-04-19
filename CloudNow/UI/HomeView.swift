@@ -37,7 +37,7 @@ struct HomeView: View {
 
                         VStack(alignment: .leading, spacing: 48) {
                             if !viewModel.continuePlaying.isEmpty {
-                                gameRow(title: "Continue Playing", games: viewModel.continuePlaying)
+                                gameRow(title: "Resume Stream", games: viewModel.continuePlaying, badge: "LIVE")
                             }
                             if !viewModel.recentlyPlayedGames.isEmpty {
                                 gameRow(title: "Recently Played", games: viewModel.recentlyPlayedGames)
@@ -110,12 +110,22 @@ struct HomeView: View {
 
     // MARK: Game Row
 
-    private func gameRow(title: String, games: [GameInfo]) -> some View {
+    private func gameRow(title: String, games: [GameInfo], badge: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text(title)
-                .font(.title2.weight(.semibold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 60)
+            HStack(spacing: 10) {
+                Text(title)
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.white)
+                if let badge {
+                    Text(badge)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.green, in: Capsule())
+                }
+            }
+            .padding(.horizontal, 60)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 24) {

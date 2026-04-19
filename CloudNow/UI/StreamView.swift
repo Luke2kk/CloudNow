@@ -141,11 +141,11 @@ struct StreamView: View {
         }
         .animation(.easeInOut(duration: 0.4), value: streamController.timeWarning)
         .animation(.easeInOut(duration: 0.2), value: showOverlay)
-        .alert("Exit Game?", isPresented: $showExitConfirmation) {
-            Button("Exit", role: .destructive) { disconnect() }
+        .alert("End Session?", isPresented: $showExitConfirmation) {
+            Button("End Session", role: .destructive) { disconnect() }
             Button("Keep Playing", role: .cancel) { }
         } message: {
-            Text("Your session will end and progress will be saved in-game.")
+            Text("This will end your GeForce NOW session. To return later, use Leave Game instead.")
         }
     }
 
@@ -176,10 +176,19 @@ struct StreamView: View {
                 .buttonStyle(.bordered)
                 .tint(.white)
 
+                Button {
+                    leave()
+                } label: {
+                    Label("Leave Game", systemImage: "house")
+                        .frame(minWidth: 180)
+                }
+                .buttonStyle(.bordered)
+                .tint(.white)
+
                 Button(role: .destructive) {
                     showExitConfirmation = true
                 } label: {
-                    Label("Exit Game", systemImage: "xmark.circle")
+                    Label("End Session", systemImage: "xmark.circle")
                         .frame(minWidth: 180)
                 }
                 .buttonStyle(.bordered)
@@ -452,6 +461,13 @@ struct StreamView: View {
         } catch {
             streamController.fail(with: error.localizedDescription)
         }
+    }
+
+    // Leaves the stream locally without stopping the server session.
+    // GFN keeps the session alive for ~1–2 minutes so it can be resumed from home.
+    private func leave() {
+        streamController.disconnect()
+        onDismiss()
     }
 
     private func disconnect() {
