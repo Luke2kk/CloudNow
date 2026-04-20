@@ -235,9 +235,17 @@ private final class WebRTCFrameRenderer: NSObject, LKRTCVideoRenderer {
     func renderFrame(_ frame: LKRTCVideoFrame?) {
         guard let frame else { return }
 
-        // Hardware-decoded H.264/H.265/AV1 frames arrive as CVPixelBuffer (NV12/420v)
-        guard let cvBuf = (frame.buffer as? LKRTCCVPixelBuffer)?.pixelBuffer else {
-            print("[WebRTCFrameRenderer] Non-CVPixelBuffer frame: \(type(of: frame.buffer))")
+        // Hardware-decoded H.264/H.265/AV1 frames arrive as CVPixelBuffer (NV12/420v).
+        // H.265/HDR/AV1 can fall back to software decoding (LKRTCI420Buffer) on some
+        // hardware — convert to a planar CVPixelBuffer so the display layer can render it.
+        let cvBuf: CVPixelBuffer
+        if let hwBuf = frame.buffer as? LKRTCCVPixelBuffer {
+            cvBuf = hwBuf.pixelBuffer
+        } else if let i420 = frame.buffer as? LKRTCI420Buffer {
+            guard let converted = i420ToCVPixelBuffer(i420) else { return }
+            cvBuf = converted
+        } else {
+            print("[WebRTCFrameRenderer] Unhandled frame type: \(type(of: frame.buffer))")
             return
         }
 
@@ -264,6 +272,27 @@ private final class WebRTCFrameRenderer: NSObject, LKRTCVideoRenderer {
         )
         guard let sampleBuffer else { return }
         displayLayer?.enqueue(sampleBuffer)
+    }
+
+    private func i420ToCVPixelBuffer(_ i420: LKRTCI420Buffer) -> CVPixelBuffer? {
+        let w = Int(i420.width), h = Int(i420.height)
+        var pb: CVPixelBuffer?
+        guard CVPixelBufferCreate(kCFAllocatorDefault, w, h,
+                                  kCVPixelFormatType_420YpCbCr8Planar, nil, &pb) == kCVReturnSuccess,
+              let pb else { return nil }
+        CVPixelBufferLockBaseAddress(pb, [])
+        defer { CVPixelBufferUnlockBaseAddress(pb, []) }
+        func copyPlane(src: UnsafePointer<UInt8>?, srcStride: Int32, plane: Int, rows: Int, cols: Int) {
+            guard let src, let dst = CVPixelBufferGetBaseAddressOfPlane(pb, plane) else { return }
+            let dstStride = CVPixelBufferGetBytesPerRowOfPlane(pb, plane)
+            for row in 0..<rows {
+                memcpy(dst.advanced(by: row * dstStride), src.advanced(by: row * Int(srcStride)), cols)
+            }
+        }
+        copyPlane(src: i420.dataY, srcStride: i420.strideY, plane: 0, rows: h,   cols: w)
+        copyPlane(src: i420.dataU, srcStride: i420.strideU, plane: 1, rows: h/2, cols: w/2)
+        copyPlane(src: i420.dataV, srcStride: i420.strideV, plane: 2, rows: h/2, cols: w/2)
+        return pb
     }
 }
 
