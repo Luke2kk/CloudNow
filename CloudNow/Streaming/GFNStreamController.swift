@@ -129,7 +129,7 @@ final class GFNStreamController: NSObject {
     func toggleRemoteMode() {
         inputSender?.toggleRemoteMode()
         remoteMode = inputSender?.remoteMode ?? .mouse
-        videoView?.gamepadModeActive = (remoteMode == .gamepad)
+        videoView?.gamepadModeActive = (remoteMode == .gamepad || remoteMode == .dualsense)
     }
 
     func setInputPaused(_ paused: Bool) {
@@ -761,7 +761,7 @@ extension GFNStreamController: LKRTCDataChannelDelegate {
             sender.menuToggleHandler = { [weak self] in self?.handleMenuPress() }
             sender.onRemoteModeChanged = { [weak self] mode in
                 self?.remoteMode = mode
-                self?.videoView?.gamepadModeActive = (mode == .gamepad)
+                self?.videoView?.gamepadModeActive = (mode == .gamepad || mode == .dualsense)
             }
             sender.start()
             self.inputSender = sender

@@ -148,7 +148,7 @@ struct StreamView: View {
         .onChange(of: showOverlay) { _, showing in
             // Pause game input while overlay is open in gamepad mode so D-pad
             // navigates overlay buttons instead of moving the in-game character.
-            streamController.setInputPaused(showing && streamController.remoteMode == .gamepad)
+            streamController.setInputPaused(showing && streamController.remoteMode != .mouse)
         }
         .alert("End Session?", isPresented: $showExitConfirmation) {
             Button("End Session", role: .destructive) { disconnect() }
@@ -176,11 +176,8 @@ struct StreamView: View {
                 Button {
                     streamController.toggleRemoteMode()
                 } label: {
-                    Label(
-                        streamController.remoteMode == .mouse ? "Remote: Mouse" : "Remote: Gamepad",
-                        systemImage: streamController.remoteMode == .mouse ? "cursorarrow" : "gamecontroller"
-                    )
-                    .frame(minWidth: 180)
+                    Label(remoteModeLabel, systemImage: remoteModeIcon)
+                        .frame(minWidth: 180)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.white)
@@ -251,6 +248,22 @@ struct StreamView: View {
         .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 16))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .padding(60)
+    }
+
+    private var remoteModeLabel: String {
+        switch streamController.remoteMode {
+        case .mouse:     return "Remote: Mouse"
+        case .gamepad:   return "Remote: Gamepad"
+        case .dualsense: return "Remote: DualSense"
+        }
+    }
+
+    private var remoteModeIcon: String {
+        switch streamController.remoteMode {
+        case .mouse:     return "cursorarrow"
+        case .gamepad:   return "gamecontroller"
+        case .dualsense: return "hand.point.up.left"
+        }
     }
 
     private func metricRow(icon: String, label: String, value: String, history: [Double], color: Color) -> some View {
