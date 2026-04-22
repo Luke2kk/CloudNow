@@ -100,7 +100,8 @@ class GamesViewModel {
     }
 
     var favoriteGames: [GameInfo] {
-        mainGames.filter { favoriteIds.contains($0.id) }
+        var seen = Set<String>()
+        return mainGames.filter { favoriteIds.contains($0.id) && seen.insert($0.id).inserted }
     }
 
     var recentlyPlayedGames: [GameInfo] {
