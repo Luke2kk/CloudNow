@@ -161,7 +161,7 @@ struct HomeView: View {
                 endPoint: UnitPoint(x: 0.5, y: 0.55)
             )
 
-            HStack(spacing: 20) {
+            HStack {
                 Button {
                     onPlay(game)
                 } label: {
@@ -169,10 +169,6 @@ struct HomeView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.green)
-
-                Text(game.title)
-                    .font(.largeTitle.weight(.bold))
-                    .foregroundStyle(.white)
                 Spacer()
             }
             .padding(.horizontal, 40)
