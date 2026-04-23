@@ -74,6 +74,7 @@ struct StoreView: View {
                         }
                         .padding(.horizontal, 60)
                     }
+                    .scrollClipDisabled()
                     .padding(.vertical, 32)
                 }
                 LazyVGrid(columns: columns, spacing: 40) {
