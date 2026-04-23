@@ -85,24 +85,25 @@ struct SettingsView: View {
                         Text("Korean").tag("ko_KR")
                     }
 
-                    LabeledContent {
+                    LabeledContent("Max Bitrate") {
                         HStack(spacing: 16) {
                             Button {
                                 vm.streamSettings.maxBitrateKbps = max(15_000, vm.streamSettings.maxBitrateKbps - 5_000)
-                            } label: { Image(systemName: "minus.circle") }
+                            } label: {
+                                Image(systemName: "minus.circle")
+                                    .padding(.horizontal, 16)
+                            }
                             .buttonStyle(.plain)
+                            Text("\(vm.streamSettings.maxBitrateKbps / 1000) Mbps")
+                                .monospacedDigit()
+                                .frame(minWidth: 72)
                             Button {
                                 vm.streamSettings.maxBitrateKbps = min(100_000, vm.streamSettings.maxBitrateKbps + 5_000)
-                            } label: { Image(systemName: "plus.circle") }
+                            } label: {
+                                Image(systemName: "plus.circle")
+                                    .padding(.horizontal, 16)
+                            }
                             .buttonStyle(.plain)
-                        }
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Max Bitrate")
-                            Text("\(vm.streamSettings.maxBitrateKbps / 1000) Mbps")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
                         }
                     }
 
@@ -145,24 +146,25 @@ struct SettingsView: View {
                 }
 
                 Section("Controller") {
-                    LabeledContent {
+                    LabeledContent("Deadzone") {
                         HStack(spacing: 16) {
                             Button {
                                 vm.streamSettings.controllerDeadzone = max(0.05, vm.streamSettings.controllerDeadzone - 0.01)
-                            } label: { Image(systemName: "minus.circle") }
+                            } label: {
+                                Image(systemName: "minus.circle")
+                                    .padding(.horizontal, 16)
+                            }
                             .buttonStyle(.plain)
+                            Text("\(Int(vm.streamSettings.controllerDeadzone * 100))%")
+                                .monospacedDigit()
+                                .frame(minWidth: 44)
                             Button {
                                 vm.streamSettings.controllerDeadzone = min(0.30, vm.streamSettings.controllerDeadzone + 0.01)
-                            } label: { Image(systemName: "plus.circle") }
+                            } label: {
+                                Image(systemName: "plus.circle")
+                                    .padding(.horizontal, 16)
+                            }
                             .buttonStyle(.plain)
-                        }
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Deadzone")
-                            Text("\(Int(vm.streamSettings.controllerDeadzone * 100))%")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
                         }
                     }
                     Text("Increase if your controller drifts at rest. Default: 15%.")
