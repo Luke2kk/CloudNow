@@ -18,7 +18,9 @@ struct HomeView: View {
                         Color.gray.opacity(0.2)
                             .frame(maxWidth: .infinity)
                             .frame(height: 420)
+                            .clipShape(RoundedRectangle(cornerRadius: 20))
                             .shimmer()
+                            .padding(.horizontal, 60)
                         VStack(alignment: .leading, spacing: 48) {
                             skeletonRow
                             skeletonRow
@@ -33,9 +35,12 @@ struct HomeView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         // Hero banner: resumable → active session → recently played → favorite
+                        let heroGame: GameInfo? = activeResumable == nil
+                            ? (viewModel.continuePlaying.first ?? viewModel.recentlyPlayedGames.first ?? viewModel.favoriteGames.first)
+                            : nil
                         if let rs = activeResumable {
                             resumeBanner(rs)
-                        } else if let hero = viewModel.continuePlaying.first ?? viewModel.recentlyPlayedGames.first ?? viewModel.favoriteGames.first {
+                        } else if let hero = heroGame {
                             heroBanner(hero)
                         }
 
@@ -43,11 +48,12 @@ struct HomeView: View {
                             if !viewModel.continuePlaying.isEmpty {
                                 gameRow(title: "Resume Stream", games: viewModel.continuePlaying, badge: "LIVE")
                             }
-                            if !viewModel.recentlyPlayedGames.isEmpty {
-                                gameRow(title: "Recently Played", games: viewModel.recentlyPlayedGames)
+                            let recentWithoutHero = viewModel.recentlyPlayedGames.filter { $0.id != heroGame?.id }
+                            if !recentWithoutHero.isEmpty {
+                                gameRow(title: "Recently Played", games: recentWithoutHero)
                             }
                             if !viewModel.favoriteGames.isEmpty {
-                                gameRow(title: "Favorites", games: viewModel.favoriteGames)
+                                gameRow(title: "Favorites", games: viewModel.favoriteGames, isFavoritesRow: true)
                             }
                         }
                         .padding(.top, 48)
@@ -127,62 +133,18 @@ struct HomeView: View {
             }
             .padding(60)
         }
+        .focusSection()
     }
 
     // MARK: Hero Banner
 
     private func heroBanner(_ game: GameInfo) -> some View {
-        ZStack(alignment: .bottomLeading) {
-            AsyncImage(url: game.heroBannerUrl.flatMap { URL(string: $0) }) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                case .failure, .empty:
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.2))
-                @unknown default:
-                    Color.gray.opacity(0.2)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 420)
-            .clipped()
-            .overlay(
-                LinearGradient(
-                    colors: [.black.opacity(0.7), .clear, .black.opacity(0.4)],
-                    startPoint: .bottom,
-                    endPoint: .top
-                )
-            )
-
-            HStack(alignment: .bottom) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(game.title)
-                        .font(.largeTitle.weight(.bold))
-                        .foregroundStyle(.white)
-                        .shadow(radius: 4)
-
-                    if viewModel.continuePlaying.contains(where: { $0.id == game.id }) {
-                        Button {
-                            onPlay(game)
-                        } label: {
-                            Label("Resume", systemImage: "play.fill")
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.green)
-                    }
-                }
-                Spacer()
-            }
-            .padding(60)
-        }
+        HeroBannerView(game: game, onPlay: onPlay)
     }
 
     // MARK: Game Row
 
-    private func gameRow(title: String, games: [GameInfo], badge: String? = nil) -> some View {
+    private func gameRow(title: String, games: [GameInfo], badge: String? = nil, isFavoritesRow: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack(spacing: 10) {
                 Text(title)
@@ -202,14 +164,27 @@ struct HomeView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 24) {
                     ForEach(games) { game in
-                        GameCardView(game: game) {
-                            onPlay(game)
+                        if isFavoritesRow {
+                            GameCardView(game: game) { onPlay(game) }
+                                .frame(width: 200)
+                                .contextMenu {
+                                    Button {
+                                        viewModel.toggleFavorite(game.id)
+                                    } label: {
+                                        Label("Remove from Favorites", systemImage: "star.slash.fill")
+                                    }
+                                }
+                        } else {
+                            GameCardView(game: game) { onPlay(game) }
+                                .frame(width: 200)
                         }
-                        .frame(width: 200)
                     }
                 }
                 .padding(.horizontal, 60)
+                .padding(.vertical, 20)
             }
+            .focusSection()
+            .scrollClipDisabled()
         }
     }
 
@@ -250,5 +225,70 @@ struct HomeView: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 500)
         }
+    }
+}
+
+// MARK: - Hero Banner View
+
+private struct HeroBannerView: View {
+    let game: GameInfo
+    let onPlay: (GameInfo) -> Void
+    @State private var attempt = 0
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            AsyncImage(url: game.heroBannerUrl.flatMap { URL(string: $0) }) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                case .failure:
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.2))
+                        .shimmer()
+                        .onAppear {
+                            guard attempt < 3 else { return }
+                            Task {
+                                try? await Task.sleep(for: .seconds(pow(2.0, Double(attempt)) * 0.5))
+                                attempt += 1
+                            }
+                        }
+                case .empty:
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.2))
+                        .shimmer()
+                @unknown default:
+                    Color.gray.opacity(0.2)
+                }
+            }
+            .id(attempt)
+            .frame(maxWidth: .infinity)
+            .frame(height: 420)
+
+            LinearGradient(
+                colors: [.black.opacity(0.85), .black.opacity(0.5), .clear],
+                startPoint: .bottom,
+                endPoint: UnitPoint(x: 0.5, y: 0.55)
+            )
+
+            HStack {
+                Button {
+                    onPlay(game)
+                } label: {
+                    Label("Play", systemImage: "play.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+                Spacer()
+            }
+            .padding(.horizontal, 40)
+            .padding(.vertical, 28)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 420)
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .padding(.horizontal, 60)
+        .focusSection()
     }
 }

@@ -129,7 +129,7 @@ final class GFNStreamController: NSObject {
     func toggleRemoteMode() {
         inputSender?.toggleRemoteMode()
         remoteMode = inputSender?.remoteMode ?? .mouse
-        videoView?.gamepadModeActive = (remoteMode == .gamepad)
+        videoView?.gamepadModeActive = (remoteMode == .gamepad || remoteMode == .dualsense)
     }
 
     func setInputPaused(_ paused: Bool) {
@@ -758,10 +758,13 @@ extension GFNStreamController: LKRTCDataChannelDelegate {
             sender.setProtocolVersion(version)
             sender.deadzone = Float(self.settings.controllerDeadzone)
             sender.overlayTriggerButton = self.settings.overlayTriggerButton
+            sender.remoteMode = self.settings.defaultRemoteInputMode
+            self.remoteMode = sender.remoteMode
+            self.videoView?.gamepadModeActive = (self.remoteMode == .gamepad || self.remoteMode == .dualsense)
             sender.menuToggleHandler = { [weak self] in self?.handleMenuPress() }
             sender.onRemoteModeChanged = { [weak self] mode in
                 self?.remoteMode = mode
-                self?.videoView?.gamepadModeActive = (mode == .gamepad)
+                self?.videoView?.gamepadModeActive = (mode == .gamepad || mode == .dualsense)
             }
             sender.start()
             self.inputSender = sender

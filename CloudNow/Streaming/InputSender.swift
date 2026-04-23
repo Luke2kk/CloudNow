@@ -42,9 +42,10 @@ private enum GFNInput {
 
 // MARK: - Remote Input Mode
 
-enum RemoteInputMode {
+enum RemoteInputMode: String, Codable, Equatable {
     case mouse
     case gamepad
+    case dualsense
 }
 
 // MARK: - Input Event Handler
@@ -333,7 +334,7 @@ final class InputSender {
     static let remoteSensitivity: Float = 250.0
 
     /// Siri Remote input mode. Defaults to .mouse so the touchpad drives the cursor.
-    private(set) var remoteMode: RemoteInputMode = .mouse
+    var remoteMode: RemoteInputMode = .mouse
 
     /// Radial deadzone for analog stick axes (0.0–1.0). Set from StreamSettings.controllerDeadzone.
     var deadzone: Float = 0.15
@@ -362,6 +363,10 @@ final class InputSender {
     // Siri Remote state tracking
     private var lastMicroDpad: (x: Float, y: Float) = (0, 0)
     private var lastMicroButtonA = false
+
+    // DualSense touchpad state tracking
+    private var lastDualSenseTouchpad: (x: Float, y: Float) = (0, 0)
+    private var lastDualSenseTouchpadClick = false
 
     // Per-controller overlay trigger hold duration (ticks at 60 Hz)
     private var overlayHoldTicks: [Int: Int] = [:]
@@ -403,13 +408,22 @@ final class InputSender {
     // MARK: Remote Mode
 
     func toggleRemoteMode() {
-        remoteMode = (remoteMode == .mouse) ? .gamepad : .mouse
+        switch remoteMode {
+        case .mouse:     remoteMode = .gamepad
+        case .gamepad:   remoteMode = .dualsense
+        case .dualsense: remoteMode = .mouse
+        }
+        applyRemoteMode()
+    }
+
+    private func applyRemoteMode() {
         lastMicroDpad = (0, 0)
         lastMicroButtonA = false
+        lastDualSenseTouchpad = (0, 0)
+        lastDualSenseTouchpadClick = false
         overlayHoldTicks.removeAll()
-        // Update system gesture ownership for all connected extended gamepads
         for controller in GCController.controllers() where controller.extendedGamepad != nil {
-            if remoteMode == .gamepad {
+            if remoteMode == .gamepad || remoteMode == .dualsense {
                 claimControllerInput(controller)
             } else {
                 releaseControllerInput(controller)
@@ -426,8 +440,8 @@ final class InputSender {
 
         if extended.isEmpty && micro.isEmpty { return }
 
-        if remoteMode == .gamepad {
-            // Gamepad mode: extended controller owns the game; remote is suppressed when
+        if remoteMode == .gamepad || remoteMode == .dualsense {
+            // Gamepad/DualSense mode: extended controller owns the game; remote is suppressed when
             // a real controller is present (otherwise the remote's empty state overwrites it).
             for (idx, controller) in extended.prefix(4).enumerated() {
                 var (btns, lt, rt, lx, ly, rx, ry) = mapGCControllerToXInput(controller, deadzone: deadzone)
@@ -468,6 +482,13 @@ final class InputSender {
                     gamepadBitmap: gamepadBitmap
                 )
                 channel?.sendData(data)
+            }
+
+            // DualSense mode: poll touchpad for mouse movement alongside regular gamepad packets
+            if remoteMode == .dualsense, !isPaused {
+                if let ds = extended.first(where: { $0.extendedGamepad is GCDualSenseGamepad }) {
+                    handleDualSenseTouchpad(ds)
+                }
             }
 
             // Only use the Siri Remote as a gamepad when no real controller is connected
@@ -537,6 +558,33 @@ final class InputSender {
                 gamepadBitmap: gamepadBitmap | 1  // Siri Remote acts as slot 0
             )
             channel?.sendData(data)
+
+        case .dualsense:
+            break  // Siri Remote is suppressed in DualSense mode; touchpad handled separately
+        }
+    }
+
+    private func handleDualSenseTouchpad(_ controller: GCController) {
+        guard let dualSense = controller.extendedGamepad as? GCDualSenseGamepad else { return }
+        let curX = dualSense.touchpadPrimary.xAxis.value
+        let curY = dualSense.touchpadPrimary.yAxis.value
+
+        let isTouching  = abs(curX) > 0.02 || abs(curY) > 0.02
+        let wasTouching = abs(lastDualSenseTouchpad.x) > 0.02 || abs(lastDualSenseTouchpad.y) > 0.02
+        let dx = curX - lastDualSenseTouchpad.x
+        let dy = curY - lastDualSenseTouchpad.y
+        lastDualSenseTouchpad = (curX, curY)
+
+        if isTouching && wasTouching && (abs(dx) > 0.0005 || abs(dy) > 0.0005) {
+            let pxDx = Int16(clamping: Int((dx * Self.remoteSensitivity).rounded()))
+            let pxDy = Int16(clamping: Int((-dy * Self.remoteSensitivity).rounded()))
+            sendMouseMove(dx: pxDx, dy: pxDy)
+        }
+
+        let clicked = dualSense.touchpadButton.isPressed
+        if clicked != lastDualSenseTouchpadClick {
+            lastDualSenseTouchpadClick = clicked
+            sendMouseButton(down: clicked, button: 1)
         }
     }
 
@@ -667,7 +715,8 @@ final class InputSender {
         gamepadBitmap |= (1 << UInt8(idx & 3))
         // Auto-switch to gamepad mode when a real controller connects.
         if remoteMode == .mouse {
-            toggleRemoteMode()
+            remoteMode = .gamepad
+            applyRemoteMode()
             onRemoteModeChanged?(remoteMode)
         } else {
             claimControllerInput(controller)
@@ -685,8 +734,9 @@ final class InputSender {
         let idx = GCController.controllers().firstIndex(where: { $0 === controller }) ?? 0
         gamepadBitmap &= ~(1 << UInt8(idx & 3))
         // Revert to mouse mode when the last controller disconnects.
-        if gamepadBitmap == 0 && remoteMode == .gamepad {
-            toggleRemoteMode()
+        if gamepadBitmap == 0 && remoteMode != .mouse {
+            remoteMode = .mouse
+            applyRemoteMode()
             onRemoteModeChanged?(remoteMode)
         }
         let data = encoder.encodeGamepad(

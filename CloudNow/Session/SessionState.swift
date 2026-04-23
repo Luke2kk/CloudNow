@@ -16,6 +16,8 @@ struct StreamSettings: Codable, Equatable {
     var controllerDeadzone: Double = 0.15
     /// Which controller button triggers the GFN overlay on long-press. Default: Start (≡).
     var overlayTriggerButton: OverlayTriggerButton = .start
+    /// Default Siri Remote input mode when a stream session starts.
+    var defaultRemoteInputMode: RemoteInputMode = .mouse
     /// Preferred zone URL, e.g. "https://np-aws-us-n-virginia-1.cloudmatchbeta.nvidiagrid.net/"
     /// nil = let the GFN default VPC handle routing.
     var preferredZoneUrl: String? = nil
@@ -154,6 +156,19 @@ struct GameVariant: Equatable {
     let id: String
     let appStore: String
     var appId: String?
+
+    var storeName: String {
+        switch appStore {
+        case "STEAM": return "Steam"
+        case "EPIC_GAMES_STORE": return "Epic Games"
+        case "GOG": return "GOG"
+        case "EA_APP": return "EA App"
+        case "UBISOFT": return "Ubisoft Connect"
+        case "MICROSOFT": return "Xbox"
+        case "BATTLENET": return "Battle.net"
+        default: return appStore.replacingOccurrences(of: "_", with: " ").capitalized
+        }
+    }
 }
 
 // MARK: - Session Create Request

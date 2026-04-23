@@ -74,13 +74,14 @@ struct StoreView: View {
                         }
                         .padding(.horizontal, 60)
                     }
+                    .scrollClipDisabled()
                     .padding(.vertical, 32)
                 }
                 LazyVGrid(columns: columns, spacing: 40) {
                     ForEach(filteredGames) { game in
                         Button {
                             if game.isInLibrary {
-                                onPlay(game)
+                                onPlay(viewModel.gameWithPreferredStore(game))
                             } else {
                                 notOwnedGame = game
                                 showNotOwned = true
@@ -88,6 +89,7 @@ struct StoreView: View {
                         } label: {
                             StoreCardLabel(game: game)
                         }
+                        .aspectRatio(2/3, contentMode: .fit)
                         .buttonStyle(.card)
                         .contextMenu {
                             if game.isInLibrary {
@@ -99,6 +101,22 @@ struct StoreView: View {
                                         isFav ? "Remove from Favorites" : "Add to Favorites",
                                         systemImage: isFav ? "star.slash.fill" : "star"
                                     )
+                                }
+                                if game.variants.count > 1 {
+                                    Menu("Launch via...") {
+                                        ForEach(game.variants, id: \.id) { variant in
+                                            Button {
+                                                viewModel.setPreferredStore(gameId: game.id, variantId: variant.id)
+                                            } label: {
+                                                let isSelected = viewModel.preferredVariantId(for: game) == variant.id
+                                                if isSelected {
+                                                    Label(variant.storeName, systemImage: "checkmark")
+                                                } else {
+                                                    Text(variant.storeName)
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -120,16 +138,7 @@ struct StoreView: View {
     }
 
     private func storeName(_ store: String) -> String {
-        switch store {
-        case "STEAM": return "Steam"
-        case "EPIC_GAMES_STORE": return "Epic"
-        case "GOG": return "GOG"
-        case "EA_APP": return "EA"
-        case "UBISOFT": return "Ubisoft"
-        case "MICROSOFT": return "Xbox"
-        case "BATTLENET": return "Battle.net"
-        default: return store.replacingOccurrences(of: "_", with: " ").capitalized
-        }
+        GameVariant(id: "", appStore: store).storeName
     }
 
     private var emptyState: some View {
