@@ -133,6 +133,7 @@ struct HomeView: View {
             }
             .padding(60)
         }
+        .focusSection()
     }
 
     // MARK: Hero Banner
@@ -178,6 +179,7 @@ struct HomeView: View {
         .frame(height: 420)
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .padding(.horizontal, 60)
+        .focusSection()
     }
 
     // MARK: Game Row
