@@ -42,13 +42,11 @@ private enum GFNInput {
 
 // MARK: - Remote Input Mode (tvOS / Siri Remote only)
 
-#if os(tvOS)
 enum RemoteInputMode: String, Codable, Equatable {
     case mouse
     case gamepad
     case dualsense
 }
-#endif
 
 // MARK: - Input Event Handler
 

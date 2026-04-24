@@ -38,12 +38,6 @@ class GamesViewModel {
     var pendingSession: ActiveSessionInfo? = nil
     #endif
 
-    #if os(visionOS)
-    /// Set before opening the ImmersiveSpace so the content view can read the pending game.
-    var pendingGame: GameInfo? = nil
-    var pendingSession: ActiveSessionInfo? = nil
-    #endif
-
     private let gamesClient = GamesClient()
     private let cloudMatchClient = CloudMatchClient()
 
@@ -64,12 +58,14 @@ class GamesViewModel {
            let settings = try? JSONDecoder().decode(StreamSettings.self, from: data) {
             self.streamSettings = settings
         }
+        #if os(tvOS)
         // tvOS currently caps at 60 Hz; clamp any saved value to the screen maximum.
         // If Apple raises the cap in a future tvOS release this will automatically unlock.
         let screenMax = UIScreen.main.maximumFramesPerSecond
         if streamSettings.fps > screenMax {
             streamSettings.fps = screenMax
         }
+        #endif
     }
 
     // MARK: Computed — Entitled Resolutions & FPS
@@ -92,7 +88,11 @@ class GamesViewModel {
     /// screen's maximum refresh rate. Today tvOS caps at 60 Hz; if Apple raises it
     /// in a future update this will automatically expose the higher option.
     var availableFps: [Int] {
+        #if os(tvOS)
         let maxFps = UIScreen.main.maximumFramesPerSecond
+        #else
+        let maxFps = 120
+        #endif
         guard let resos = subscription?.entitledResolutions, !resos.isEmpty else {
             return [30, 60].filter { $0 <= maxFps }
         }

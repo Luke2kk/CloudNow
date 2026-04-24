@@ -302,16 +302,18 @@ private final class WebRTCFrameRenderer: NSObject, LKRTCVideoRenderer {
         defer { CVPixelBufferUnlockBaseAddress(pb, []) }
 
         // Y plane
-        if let src = i420.dataY, let dst = CVPixelBufferGetBaseAddressOfPlane(pb, 0) {
+        let srcY = i420.dataY
+        if let dst = CVPixelBufferGetBaseAddressOfPlane(pb, 0) {
             let dstStride = CVPixelBufferGetBytesPerRowOfPlane(pb, 0)
             for row in 0..<h {
-                memcpy(dst.advanced(by: row * dstStride), src.advanced(by: row * Int(i420.strideY)), w)
+                memcpy(dst.advanced(by: row * dstStride), srcY.advanced(by: row * Int(i420.strideY)), w)
             }
         }
 
         // UV plane: interleave I420 U and V into NV12 UV
-        if let srcU = i420.dataU, let srcV = i420.dataV,
-           let dst = CVPixelBufferGetBaseAddressOfPlane(pb, 1)?.assumingMemoryBound(to: UInt8.self) {
+        let srcU = i420.dataU
+        let srcV = i420.dataV
+        if let dst = CVPixelBufferGetBaseAddressOfPlane(pb, 1)?.assumingMemoryBound(to: UInt8.self) {
             let dstStride = CVPixelBufferGetBytesPerRowOfPlane(pb, 1)
             let uvRows = h / 2, uvCols = w / 2
             for row in 0..<uvRows {

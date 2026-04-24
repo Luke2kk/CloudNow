@@ -133,7 +133,9 @@ struct HomeView: View {
             }
             .padding(60)
         }
+        #if os(tvOS)
         .focusSection()
+        #endif
     }
 
     // MARK: Hero Banner
@@ -183,7 +185,9 @@ struct HomeView: View {
                 .padding(.horizontal, 60)
                 .padding(.vertical, 20)
             }
+            #if os(tvOS)
             .focusSection()
+            #endif
             .scrollClipDisabled()
         }
     }
@@ -289,6 +293,8 @@ private struct HeroBannerView: View {
         .frame(height: 420)
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .padding(.horizontal, 60)
+        #if os(tvOS)
         .focusSection()
+        #endif
     }
 }

@@ -168,7 +168,11 @@ struct StreamView: View {
         .onChange(of: showOverlay) { _, showing in
             // Pause game input while overlay is open in gamepad mode so D-pad
             // navigates overlay buttons instead of moving the in-game character.
+            #if os(tvOS)
             streamController.setInputPaused(showing && streamController.remoteMode != .mouse)
+            #else
+            streamController.setInputPaused(showing)
+            #endif
         }
         .alert("End Session?", isPresented: $showExitConfirmation) {
             Button("End Session", role: .destructive) { disconnect() }
@@ -212,7 +216,6 @@ struct StreamView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.white)
-                #endif
 
                 Button(role: .destructive) {
                     showExitConfirmation = true
@@ -274,6 +277,7 @@ struct StreamView: View {
         .padding(60)
     }
 
+    #if os(tvOS)
     private var remoteModeLabel: String {
         switch streamController.remoteMode {
         case .mouse:     return "Remote: Mouse"
@@ -289,6 +293,7 @@ struct StreamView: View {
         case .dualsense: return "hand.point.up.left"
         }
     }
+    #endif
 
     private func metricRow(icon: String, label: String, value: String, history: [Double], color: Color) -> some View {
         HStack(spacing: 8) {
