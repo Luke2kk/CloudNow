@@ -22,10 +22,14 @@ enum SDPMunger {
             guard parts.count >= 2 else { continue }
             let pt = String(parts[0])
             let name = parts[1].components(separatedBy: "/").first?.lowercased() ?? ""
-            if name == targetName { allowedPTs.insert(pt) }
+            let isMatch = name == targetName || (codec == .h265 && name == "hevc")
+            if isMatch { allowedPTs.insert(pt) }
         }
 
-        guard !allowedPTs.isEmpty else { return sdp } // Codec not in offer; leave unchanged
+        guard !allowedPTs.isEmpty else {
+            if codec != .h264 { return preferCodec(sdp, codec: .h264) }
+            return sdp
+        }
 
         // Also include RTX payload types associated (via apt=) with allowed PTs
         for line in lines where line.hasPrefix("a=fmtp:") {

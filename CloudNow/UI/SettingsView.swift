@@ -16,8 +16,22 @@ struct SettingsView: View {
             Form {
                 Section("Stream Quality") {
                     Picker("Resolution", selection: $vm.streamSettings.resolution) {
-                        ForEach(viewModel.availableResolutions, id: \.self) { res in
-                            Text(res).tag(res)
+                        let common = commonResolutions.filter { viewModel.availableResolutions.contains($0.res) }
+                        let other  = viewModel.availableResolutions.filter { res in !commonResolutions.map(\.res).contains(res) }
+                        if !common.isEmpty {
+                            Section("TV Standards") {
+                                ForEach(common, id: \.res) { item in
+                                    Label("\(item.res)  —  \(item.badge)", systemImage: item.symbol)
+                                        .tag(item.res)
+                                }
+                            }
+                        }
+                        if !other.isEmpty {
+                            Section("Other") {
+                                ForEach(other, id: \.self) { res in
+                                    Text(res).tag(res)
+                                }
+                            }
                         }
                     }
 
@@ -33,10 +47,28 @@ struct SettingsView: View {
                         }
                     }
 
-                    Picker("Color Quality", selection: $vm.streamSettings.colorQuality) {
+                    Picker(selection: $vm.streamSettings.colorQuality) {
                         ForEach(ColorQuality.allCases, id: \.self) { q in
                             Text(colorQualityLabel(q)).tag(q)
                         }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Color Quality")
+                            if vm.streamSettings.colorQuality == .hdr10bit {
+                                Text("⚠️ Experimental — GFN may downscale to ~540p when HDR is enabled.")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            } else if vm.streamSettings.colorQuality == .sdr10bit {
+                                Text("Recommended — full resolution with better color than 8-bit.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text("Standard dynamic range, widely compatible.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.vertical, 8)
                     }
 
                     Picker("Keyboard Layout", selection: $vm.streamSettings.keyboardLayout) {
@@ -65,10 +97,36 @@ struct SettingsView: View {
                         Text("Korean").tag("ko_KR")
                     }
 
-                    Toggle("Low Latency Mode (L4S)", isOn: $vm.streamSettings.enableL4S)
-                    Text("Reduces buffering on networks with L4S support (requires a compatible router and ISP).")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    LabeledContent("Max Bitrate") {
+                        HStack(spacing: 16) {
+                            Button {
+                                vm.streamSettings.maxBitrateKbps = max(15_000, vm.streamSettings.maxBitrateKbps - 5_000)
+                            } label: {
+                                Image(systemName: "minus.circle")
+                            }
+                            .buttonStyle(.plain)
+                            Text("\(vm.streamSettings.maxBitrateKbps / 1000) Mbps")
+                                .monospacedDigit()
+                                .frame(minWidth: 72)
+                                .padding(.horizontal, 24)
+                            Button {
+                                vm.streamSettings.maxBitrateKbps = min(100_000, vm.streamSettings.maxBitrateKbps + 5_000)
+                            } label: {
+                                Image(systemName: "plus.circle")
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    Toggle(isOn: $vm.streamSettings.enableL4S) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Low Latency Mode (L4S)")
+                            Text("Reduces buffering on networks with L4S support (requires a compatible router and ISP).")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 8)
+                    }
                 }
 
                 Section("Server Region") {
@@ -76,7 +134,13 @@ struct SettingsView: View {
                         showZonePicker = true
                     } label: {
                         HStack {
-                            Text("Preferred Zone")
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Preferred Zone")
+                                Text("Auto routing picks the best balance of ping and queue depth. Tap to pin a specific region.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.vertical, 8)
                             Spacer()
                             Text(zoneLabel(vm.streamSettings.preferredZoneUrl))
                                 .foregroundStyle(.secondary)
@@ -90,17 +154,18 @@ struct SettingsView: View {
                         }
                         .foregroundStyle(.secondary)
                     }
-
-                    Text("Auto routing selects the zone with the best balance of ping and queue depth. Manual zone selection lets you pin a specific region.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
 
                 Section("Microphone") {
-                    Toggle("Use Microphone", isOn: $vm.streamSettings.micEnabled)
-                    Text("Enables voice chat via a connected Bluetooth headset or AirPods. Requires microphone permission.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Toggle(isOn: $vm.streamSettings.micEnabled) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Use Microphone")
+                            Text("Enables voice chat via a connected Bluetooth headset or AirPods. Requires microphone permission.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 8)
+                    }
                 }
 
                 #if os(visionOS)
@@ -115,14 +180,73 @@ struct SettingsView: View {
                 }
                 #endif
 
-                Section("Controller") {
-                    LabeledContent("Deadzone") {
-                        Text("\(Int(vm.streamSettings.controllerDeadzone * 100))%")
+                #if os(visionOS)
+                Section("Display") {
+                    Picker("Immersion Style", selection: $immersionStyleRaw) {
+                        Text("Full (Cinema)").tag("full")
+                        Text("Mixed (Floating)").tag("mixed")
                     }
-                    Slider(value: $vm.streamSettings.controllerDeadzone, in: 0.05...0.30, step: 0.01)
-                    Text("Increase if your controller drifts at rest. Default: 15%.")
+                    Text("Full replaces your surroundings with a cinema-black background. Mixed keeps the game floating in your real environment. You can also switch between them with the Digital Crown while streaming.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+                #endif
+
+                Section("Controller") {
+                    LabeledContent {
+                        HStack(spacing: 16) {
+                            Button {
+                                vm.streamSettings.controllerDeadzone = max(0.05, vm.streamSettings.controllerDeadzone - 0.01)
+                            } label: {
+                                Image(systemName: "minus.circle")
+                            }
+                            .buttonStyle(.plain)
+                            Text("\(Int(vm.streamSettings.controllerDeadzone * 100))%")
+                                .monospacedDigit()
+                                .frame(minWidth: 44)
+                                .padding(.horizontal, 24)
+                            Button {
+                                vm.streamSettings.controllerDeadzone = min(0.30, vm.streamSettings.controllerDeadzone + 0.01)
+                            } label: {
+                                Image(systemName: "plus.circle")
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Deadzone")
+                            Text("Increase if your controller drifts at rest. Default: 15%.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 8)
+                    }
+                    Picker(selection: $vm.streamSettings.overlayTriggerButton) {
+                        ForEach(OverlayTriggerButton.allCases, id: \.self) { btn in
+                            Text(btn.rawValue).tag(btn)
+                        }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Overlay Button")
+                            Text("Long-press this button during play to open the GFN overlay. Switch if it conflicts with an in-game action.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 8)
+                    }
+                    Picker(selection: $vm.streamSettings.defaultRemoteInputMode) {
+                        Text("Mouse").tag(RemoteInputMode.mouse)
+                        Text("Gamepad").tag(RemoteInputMode.gamepad)
+                        Text("DualSense").tag(RemoteInputMode.dualsense)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Default Input Mode")
+                            Text("Siri Remote mode at stream start. Can be changed mid-session from the overlay menu.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 8)
+                    }
                     LabeledContent("Protocol", value: "XInput v2/v3")
                 }
 
@@ -151,7 +275,7 @@ struct SettingsView: View {
                     }
                 }
             }
-            .navigationTitle("Settings")
+            .navigationTitle("")
             .sheet(isPresented: $showZonePicker) {
                 ZonePickerView(selectedZoneUrl: $vm.streamSettings.preferredZoneUrl)
             }
@@ -164,6 +288,14 @@ struct SettingsView: View {
         let host = URL(string: url)?.host ?? url
         return host.components(separatedBy: ".").first?.uppercased() ?? url
     }
+
+    private struct ResolutionEntry { let res: String; let badge: String; let symbol: String }
+    private let commonResolutions: [ResolutionEntry] = [
+        ResolutionEntry(res: "1280x720",  badge: "HD",      symbol: "tv"),
+        ResolutionEntry(res: "1920x1080", badge: "Full HD", symbol: "tv"),
+        ResolutionEntry(res: "2560x1440", badge: "2K",      symbol: "tv"),
+        ResolutionEntry(res: "3840x2160", badge: "4K",      symbol: "4k.tv"),
+    ]
 
     private func colorQualityLabel(_ q: ColorQuality) -> String {
         switch q {
@@ -179,6 +311,7 @@ struct SettingsView: View {
 private struct ZonePickerView: View {
     @Binding var selectedZoneUrl: String?
     @Environment(\.dismiss) private var dismiss
+    @Environment(GamesViewModel.self) private var viewModel
 
     @State private var zones: [GFNZone] = []
     @State private var isLoading = true
@@ -195,7 +328,7 @@ private struct ZonePickerView: View {
         }
     }
 
-    private var autoZone: GFNZone? { zones.autoZone }
+    private var autoZone: GFNZone? { zones.autoZone(isUnlimited: viewModel.subscription?.isUnlimited ?? false) }
 
     var body: some View {
         NavigationStack {

@@ -1,3 +1,4 @@
+import BackgroundTasks
 import Foundation
 import Observation
 
@@ -30,6 +31,10 @@ final class AuthManager {
 
     private let api = NVIDIAAuthAPI()
     private var loginTask: Task<Void, Never>?
+    private var activeRefreshTask: Task<AuthSession, Error>?
+    private var refreshTimer: Task<Void, Never>?
+
+    private static let bgTaskID = "com.owenselles.CloudNow.tokenRefresh"
 
     // MARK: Lifecycle
 
@@ -38,6 +43,8 @@ final class AuthManager {
               let saved = try? JSONDecoder().decode(AuthSession.self, from: stored)
         else { return }
         session = saved
+        scheduleProactiveRefresh()
+        scheduleBackgroundRefresh()
         await refreshIfNeeded()
     }
 
@@ -102,6 +109,8 @@ final class AuthManager {
 
                 let newSession = AuthSession(provider: selectedProvider, tokens: tokens, user: user)
                 session = newSession
+                scheduleProactiveRefresh()
+                scheduleBackgroundRefresh()
                 try persist(newSession)
                 loginPhase = .idle
             } catch is CancellationError {
@@ -121,6 +130,7 @@ final class AuthManager {
     // MARK: Logout
 
     func logout() {
+        refreshTimer?.cancel()
         session = nil
         loginPhase = .idle
         KeychainService.delete()
@@ -139,7 +149,7 @@ final class AuthManager {
 
     // MARK: Private
 
-    private func refreshIfNeeded() async {
+    func refreshIfNeeded() async {
         guard let s = session, s.tokens.isNearExpiry else { return }
         do {
             let refreshed = try await refresh(session: s)
@@ -151,6 +161,7 @@ final class AuthManager {
             // and retry on the next call.
             if s.tokens.isExpired {
                 print("[Auth] Token expired and all refresh mechanisms exhausted — clearing session, re-login required")
+                refreshTimer?.cancel()
                 session = nil
                 KeychainService.delete()
             } else {
@@ -162,11 +173,27 @@ final class AuthManager {
     }
 
     private func refresh(session s: AuthSession) async throws -> AuthSession {
+        // Coalesce: if a refresh is already in-flight, wait for it instead of
+        // starting a second one (which would try to use an already-rotated token).
+        if let existing = activeRefreshTask {
+            return try await existing.value
+        }
+        let task = Task<AuthSession, Error> { @MainActor [weak self] in
+            guard let self else { throw AuthError.noSession }
+            defer { self.activeRefreshTask = nil }
+            return try await self.performRefresh(session: s)
+        }
+        activeRefreshTask = task
+        return try await task.value
+    }
+
+    private func performRefresh(session s: AuthSession) async throws -> AuthSession {
         var updated = s
         // Primary: client_token grant (re-binds to clientID, works cross-client).
         // Skip if the stored clientToken is already past its expiry — treat it the same as absent.
+        // Use ?? false so a missing expiry date is treated conservatively as expired.
         let clientTokenUsable = s.tokens.clientToken != nil &&
-            (s.tokens.clientTokenExpiresAt.map { $0 > Date() } ?? true)
+            (s.tokens.clientTokenExpiresAt.map { $0 > Date() } ?? false)
         if !clientTokenUsable {
             print("[Auth] clientToken absent or expired (expiresAt: \(s.tokens.clientTokenExpiresAt?.description ?? "nil")), skipping primary path")
         }
@@ -189,10 +216,26 @@ final class AuthManager {
                 updated.tokens.refreshToken = savedRefreshToken
             }
             print("[Auth] refresh via refresh_token grant succeeded")
+        } else if let idToken = s.tokens.idToken {
+            // Third path: the idToken is a longer-lived JWT (typically 30 days) that NVIDIA
+            // servers accept directly. Use it to fetch a fresh clientToken, then re-bind.
+            // This mirrors how the official GFN client recovers when the clientToken has expired
+            // and no refresh_token is available — it passes the idToken to /client_token.
+            print("[Auth] both primary paths unavailable, attempting idToken bootstrap")
+            guard let ct = try? await api.fetchClientToken(accessToken: idToken),
+                  let rebound = try? await api.refreshWithClientToken(ct.token, userId: s.user.userId)
+            else {
+                print("[Auth] refresh failed: idToken bootstrap also failed")
+                throw AuthError.tokenRefreshFailed("All refresh mechanisms exhausted.")
+            }
+            print("[Auth] refresh via idToken bootstrap succeeded")
+            let savedRefreshToken = updated.tokens.refreshToken
+            updated.tokens = rebound
+            if updated.tokens.refreshToken == nil {
+                updated.tokens.refreshToken = savedRefreshToken
+            }
         } else {
-            // Neither path available — surface a real error so the UI can prompt re-login
-            // instead of silently returning the expired token to callers.
-            print("[Auth] refresh failed: no usable clientToken or refreshToken available")
+            print("[Auth] refresh failed: no usable clientToken, refreshToken, or idToken available")
             throw AuthError.tokenRefreshFailed("All refresh mechanisms exhausted.")
         }
         // Re-bootstrap client token
@@ -204,8 +247,34 @@ final class AuthManager {
             print("[Auth] warning: failed to re-bootstrap client_token after refresh")
         }
         session = updated
+        scheduleProactiveRefresh()
+        scheduleBackgroundRefresh()
         try persist(updated)
         return updated
+    }
+
+    // MARK: Proactive Refresh
+
+    private func scheduleProactiveRefresh() {
+        refreshTimer?.cancel()
+        guard let s = session else { return }
+        let delay = s.tokens.expiresAt.timeIntervalSinceNow - (5 * 60)
+        guard delay > 0 else {
+            Task { await self.refreshIfNeeded() }
+            return
+        }
+        refreshTimer = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled else { return }
+            await self?.refreshIfNeeded()
+        }
+    }
+
+    func scheduleBackgroundRefresh() {
+        guard let s = session else { return }
+        let request = BGAppRefreshTaskRequest(identifier: Self.bgTaskID)
+        request.earliestBeginDate = s.tokens.expiresAt.addingTimeInterval(-(5 * 60))
+        try? BGTaskScheduler.shared.submit(request)
     }
 
     private func persist(_ s: AuthSession) throws {

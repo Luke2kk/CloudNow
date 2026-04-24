@@ -28,11 +28,13 @@ actor MESClient {
     // MARK: Subscription Fetch
 
     func fetchSubscription(token: String, vpcId: String, userId: String) async throws -> SubscriptionInfo {
+        // Fall back to a known EU VPC if dynamic discovery failed — an empty vpcId returns degraded entitlements
+        let effectiveVpcId = vpcId.isEmpty ? "NP-AMS-08" : vpcId
         var comps = URLComponents(string: "https://mes.geforcenow.com/v4/subscriptions")!
         comps.queryItems = [
             URLQueryItem(name: "serviceName", value: "gfn_pc"),
             URLQueryItem(name: "languageCode", value: "en_US"),
-            URLQueryItem(name: "vpcId", value: vpcId),
+            URLQueryItem(name: "vpcId", value: effectiveVpcId),
             URLQueryItem(name: "userId", value: userId),
         ]
         guard let url = comps.url else {
@@ -43,7 +45,9 @@ actor MESClient {
         request.setValue("ec7e38d4-03af-4b58-b131-cfb0495903ab", forHTTPHeaderField: "nv-client-id")
         request.setValue("NATIVE", forHTTPHeaderField: "nv-client-type")
         request.setValue("2.0.80.173", forHTTPHeaderField: "nv-client-version")
-        request.setValue("WEBRTC", forHTTPHeaderField: "nv-client-streamer")
+        request.setValue("NVIDIA-CLASSIC", forHTTPHeaderField: "nv-client-streamer")
+        request.setValue("WINDOWS",        forHTTPHeaderField: "nv-device-os")
+        request.setValue("DESKTOP",        forHTTPHeaderField: "nv-device-type")
         request.setValue(NVIDIAAuth.userAgent, forHTTPHeaderField: "User-Agent")
         let (data, resp) = try await urlSession.data(for: request)
         guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
@@ -102,6 +106,7 @@ private struct MESRawResponse: Decodable {
             let widthInPixels: Int
             let heightInPixels: Int
             let framesPerSecond: Int
+            let isEntitled: Bool?
         }
     }
 }

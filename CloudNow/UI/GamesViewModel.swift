@@ -1,5 +1,19 @@
 import Foundation
 import Observation
+import UIKit
+
+struct ResumableSession {
+    let game: GameInfo
+    let session: SessionInfo
+    let leftAt: Date
+    /// Grace window before we stop offering to resume (GFN keeps the session ~2 min).
+    static let gracePeriod: TimeInterval = 110
+
+    var secondsRemaining: Int {
+        max(0, Int(Self.gracePeriod - Date().timeIntervalSince(leftAt)))
+    }
+    var isExpired: Bool { secondsRemaining == 0 }
+}
 
 @Observable
 class GamesViewModel {
@@ -11,9 +25,18 @@ class GamesViewModel {
     var libraryError: String?
 
     var favoriteIds: Set<String> = []
+    var preferredStoreIds: [String: String] = [:]
     var recentlyPlayedIds: [String] = []
     var streamSettings: StreamSettings = StreamSettings()
     var subscription: SubscriptionInfo? = nil
+    /// Session the user left without ending — available to resume for ~2 minutes.
+    var resumableSession: ResumableSession? = nil
+
+    #if os(visionOS)
+    /// Set before opening the ImmersiveSpace so the content view can read the pending game.
+    var pendingGame: GameInfo? = nil
+    var pendingSession: ActiveSessionInfo? = nil
+    #endif
 
     #if os(visionOS)
     /// Set before opening the ImmersiveSpace so the content view can read the pending game.
@@ -29,6 +52,10 @@ class GamesViewModel {
            let ids = try? JSONDecoder().decode([String].self, from: data) {
             self.favoriteIds = Set(ids)
         }
+        if let data = UserDefaults.standard.data(forKey: "gfn.preferredStores"),
+           let stores = try? JSONDecoder().decode([String: String].self, from: data) {
+            self.preferredStoreIds = stores
+        }
         if let data = UserDefaults.standard.data(forKey: "gfn.recentlyPlayed"),
            let ids = try? JSONDecoder().decode([String].self, from: data) {
             self.recentlyPlayedIds = ids
@@ -36,6 +63,12 @@ class GamesViewModel {
         if let data = UserDefaults.standard.data(forKey: "gfn.streamSettings"),
            let settings = try? JSONDecoder().decode(StreamSettings.self, from: data) {
             self.streamSettings = settings
+        }
+        // tvOS currently caps at 60 Hz; clamp any saved value to the screen maximum.
+        // If Apple raises the cap in a future tvOS release this will automatically unlock.
+        let screenMax = UIScreen.main.maximumFramesPerSecond
+        if streamSettings.fps > screenMax {
+            streamSettings.fps = screenMax
         }
     }
 
@@ -55,17 +88,20 @@ class GamesViewModel {
         }
     }
 
-    /// FPS values available for the currently selected resolution.
+    /// FPS values available for the currently selected resolution, capped to the
+    /// screen's maximum refresh rate. Today tvOS caps at 60 Hz; if Apple raises it
+    /// in a future update this will automatically expose the higher option.
     var availableFps: [Int] {
+        let maxFps = UIScreen.main.maximumFramesPerSecond
         guard let resos = subscription?.entitledResolutions, !resos.isEmpty else {
-            return [30, 60]
+            return [30, 60].filter { $0 <= maxFps }
         }
         let parts = streamSettings.resolution.split(separator: "x").compactMap { Int($0) }
         let w = parts.first ?? 1920
         let h = parts.last  ?? 1080
         let matching = resos.filter { $0.widthInPixels == w && $0.heightInPixels == h }
         let source = matching.isEmpty ? resos : matching
-        return Array(Set(source.map(\.framesPerSecond))).sorted()
+        return Array(Set(source.map(\.framesPerSecond))).filter { $0 <= maxFps }.sorted()
     }
 
     // MARK: Computed — Games
@@ -81,7 +117,8 @@ class GamesViewModel {
     }
 
     var favoriteGames: [GameInfo] {
-        mainGames.filter { favoriteIds.contains($0.id) }
+        var seen = Set<String>()
+        return mainGames.filter { favoriteIds.contains($0.id) && seen.insert($0.id).inserted }
     }
 
     var recentlyPlayedGames: [GameInfo] {
@@ -118,7 +155,9 @@ class GamesViewModel {
             // Non-fatal — fetch subscription tier and entitled resolutions
             if let userId = authManager.session?.user.userId {
                 let vpcId = (try? await MESClient.shared.fetchVpcId(token: token, base: base)) ?? ""
-                subscription = try? await MESClient.shared.fetchSubscription(token: token, vpcId: vpcId, userId: userId)
+                let sub = try? await MESClient.shared.fetchSubscription(token: token, vpcId: vpcId, userId: userId)
+                print("[MES] tier=\(sub?.membershipTier ?? "nil") resolutions=\(sub?.entitledResolutions.map(\.resolutionLabel) ?? [])")
+                subscription = sub
             }
         } catch {
             self.error = error.localizedDescription
@@ -141,6 +180,28 @@ class GamesViewModel {
         if recentlyPlayedIds.count > 10 { recentlyPlayedIds = Array(recentlyPlayedIds.prefix(10)) }
         let data = try? JSONEncoder().encode(recentlyPlayedIds)
         UserDefaults.standard.set(data, forKey: "gfn.recentlyPlayed")
+    }
+
+    // MARK: Preferred Store
+
+    func setPreferredStore(gameId: String, variantId: String) {
+        preferredStoreIds[gameId] = variantId
+        let data = try? JSONEncoder().encode(preferredStoreIds)
+        UserDefaults.standard.set(data, forKey: "gfn.preferredStores")
+    }
+
+    func preferredVariantId(for game: GameInfo) -> String? {
+        preferredStoreIds[game.id] ?? game.variants.first?.id
+    }
+
+    func gameWithPreferredStore(_ game: GameInfo) -> GameInfo {
+        guard let preferredId = preferredStoreIds[game.id],
+              let idx = game.variants.firstIndex(where: { $0.id == preferredId }),
+              idx != 0 else { return game }
+        var g = game
+        let preferred = g.variants.remove(at: idx)
+        g.variants.insert(preferred, at: 0)
+        return g
     }
 
     // MARK: Favorites

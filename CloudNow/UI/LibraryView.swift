@@ -40,36 +40,34 @@ struct LibraryView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.black.ignoresSafeArea()
-                if games.isEmpty && viewModel.isLoading {
-                    ScrollView {
-                        LazyVGrid(columns: columns, spacing: 40) {
-                            ForEach(0..<12, id: \.self) { _ in
-                                GameCardSkeleton()
-                            }
+        ZStack {
+            Color.black.ignoresSafeArea()
+            if games.isEmpty && viewModel.isLoading {
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: 40) {
+                        ForEach(0..<12, id: \.self) { _ in
+                            GameCardSkeleton()
                         }
-                        .padding(60)
                     }
-                    .allowsHitTesting(false)
-                } else if filteredGames.isEmpty {
-                    emptyState
-                } else {
-                    gameGrid
+                    .padding(60)
                 }
+                .allowsHitTesting(false)
+            } else if filteredGames.isEmpty {
+                emptyState
+            } else {
+                gameGrid
             }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Picker("Sort", selection: $sortOrder) {
-                            ForEach(LibrarySortOrder.allCases, id: \.self) { order in
-                                Text(order.rawValue).tag(order)
-                            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Picker("Sort", selection: $sortOrder) {
+                        ForEach(LibrarySortOrder.allCases, id: \.self) { order in
+                            Text(order.rawValue).tag(order)
                         }
-                    } label: {
-                        Label("Sort", systemImage: "arrow.up.arrow.down")
                     }
+                } label: {
+                    Label("Sort", systemImage: "arrow.up.arrow.down")
                 }
             }
         }
@@ -81,10 +79,11 @@ struct LibraryView: View {
             LazyVGrid(columns: columns, spacing: 40) {
                 ForEach(filteredGames) { game in
                     Button {
-                        onPlay(game)
+                        onPlay(viewModel.gameWithPreferredStore(game))
                     } label: {
                         GameCardLabel(game: game)
                     }
+                    .aspectRatio(2/3, contentMode: .fit)
                     #if os(tvOS)
                     .buttonStyle(.card)
                     #else
@@ -99,6 +98,22 @@ struct LibraryView: View {
                                 isFav ? "Remove from Favorites" : "Add to Favorites",
                                 systemImage: isFav ? "star.slash.fill" : "star"
                             )
+                        }
+                        if game.variants.count > 1 {
+                            Menu("Launch via...") {
+                                ForEach(game.variants, id: \.id) { variant in
+                                    Button {
+                                        viewModel.setPreferredStore(gameId: game.id, variantId: variant.id)
+                                    } label: {
+                                        let isSelected = viewModel.preferredVariantId(for: game) == variant.id
+                                        if isSelected {
+                                            Label(variant.storeName, systemImage: "checkmark")
+                                        } else {
+                                            Text(variant.storeName)
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -135,20 +150,35 @@ struct LibraryView: View {
 
 struct GameBoxArt: View {
     let url: String?
+    @State private var attempt = 0
 
     var body: some View {
         AsyncImage(url: url.flatMap { URL(string: $0) }) { phase in
             switch phase {
             case .success(let image):
                 image.resizable().aspectRatio(2/3, contentMode: .fill)
-            case .failure, .empty:
+            case .failure:
                 Rectangle()
                     .fill(Color.gray.opacity(0.2))
                     .aspectRatio(2/3, contentMode: .fit)
+                    .shimmer()
+                    .onAppear {
+                        guard attempt < 3 else { return }
+                        Task {
+                            try? await Task.sleep(for: .seconds(pow(2.0, Double(attempt)) * 0.5))
+                            attempt += 1
+                        }
+                    }
+            case .empty:
+                Rectangle()
+                    .fill(Color.gray.opacity(0.2))
+                    .aspectRatio(2/3, contentMode: .fit)
+                    .shimmer()
             @unknown default:
                 Color.gray.opacity(0.2).aspectRatio(2/3, contentMode: .fit)
             }
         }
+        .id(attempt)
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }

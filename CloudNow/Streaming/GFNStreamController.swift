@@ -132,6 +132,7 @@ final class GFNStreamController: NSObject {
     func toggleRemoteMode() {
         inputSender?.toggleRemoteMode()
         remoteMode = inputSender?.remoteMode ?? .mouse
+        videoView?.gamepadModeActive = (remoteMode == .gamepad || remoteMode == .dualsense)
     }
     #endif
 
@@ -183,7 +184,8 @@ final class GFNStreamController: NSObject {
         let client = GFNSignalingClient(
             signalingUrl: session.signalingUrl,
             sessionId: session.sessionId,
-            serverIp: session.serverIp
+            serverIp: session.serverIp,
+            resolution: settings.resolution
         )
         client.onEvent = { [weak self] event in
             Task { @MainActor [weak self] in self?.handleSignalingEvent(event) }
@@ -767,6 +769,15 @@ extension GFNStreamController: LKRTCDataChannelDelegate {
             let sender = InputSender(channel: self)
             sender.setProtocolVersion(version)
             sender.deadzone = Float(self.settings.controllerDeadzone)
+            sender.overlayTriggerButton = self.settings.overlayTriggerButton
+            sender.remoteMode = self.settings.defaultRemoteInputMode
+            self.remoteMode = sender.remoteMode
+            self.videoView?.gamepadModeActive = (self.remoteMode == .gamepad || self.remoteMode == .dualsense)
+            sender.menuToggleHandler = { [weak self] in self?.handleMenuPress() }
+            sender.onRemoteModeChanged = { [weak self] mode in
+                self?.remoteMode = mode
+                self?.videoView?.gamepadModeActive = (mode == .gamepad || mode == .dualsense)
+            }
             sender.start()
             self.inputSender = sender
             // Forward keyboard/mouse events from the video surface to the sender

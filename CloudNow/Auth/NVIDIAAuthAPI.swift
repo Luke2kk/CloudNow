@@ -20,7 +20,7 @@ enum NVIDIAAuth {
     static let callbackScheme = "http"
 
     // Matches the official GFN PC client User-Agent so the NVIDIA backend accepts the token
-    static let userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 NVIDIACEFClient/HEAD/debb5919f6 GFN-PC/2.0.80.173"
+    static let userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 NVIDIACEFClient/HEAD/debb5919f6 GFN-PC/2.0.83.130"
 }
 
 // MARK: - PKCE Helpers
@@ -345,8 +345,10 @@ actor NVIDIAAuthAPI {
             refreshToken: payload.refresh_token,
             idToken: payload.id_token,
             expiresAt: Date().addingTimeInterval(TimeInterval(payload.expires_in ?? 86400)),
-            clientToken: nil,
-            clientTokenExpiresAt: nil
+            clientToken: payload.client_token,
+            clientTokenExpiresAt: payload.client_token_expires_in.map {
+                Date().addingTimeInterval(TimeInterval($0))
+            }
         )
     }
 
@@ -398,6 +400,8 @@ private struct TokenResponse: Decodable {
     let refresh_token: String?
     let id_token: String?
     let expires_in: Int?
+    let client_token: String?
+    let client_token_expires_in: Int?
 }
 
 private struct ClientTokenResponse: Decodable {

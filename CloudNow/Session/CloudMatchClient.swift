@@ -11,7 +11,7 @@ private func gfnHeaders(token: String, clientId: String, deviceId: String, inclu
         "nv-client-id": clientId,
         "nv-client-streamer": "NVIDIA-CLASSIC",
         "nv-client-type": "NATIVE",
-        "nv-client-version": "2.0.80.173",
+        "nv-client-version": "2.0.83.130",
         "nv-device-make": "UNKNOWN",
         "nv-device-model": "UNKNOWN",
         "nv-device-os": "MACOS",
@@ -138,6 +138,7 @@ private func buildSessionRequestBody(_ input: SessionCreateRequest) -> [String: 
     let width = Int(resolutionParts.first ?? "1920") ?? 1920
     let height = Int(resolutionParts.last ?? "1080") ?? 1080
     let tzOffset = -TimeZone.current.secondsFromGMT() * 1000
+    let isHdr = input.settings.colorQuality == .hdr10bit
 
     return [
         "sessionRequestData": [
@@ -151,16 +152,16 @@ private func buildSessionRequestBody(_ input: SessionCreateRequest) -> [String: 
             "clientVersion": "30.0",
             "sdkVersion": "1.0",
             "streamerVersion": 1,
-            "clientPlatformName": "windows",
+            "clientPlatformName": "mac",
             "clientRequestMonitorSettings": [[
                 "widthInPixels": width,
                 "heightInPixels": height,
                 "framesPerSecond": input.settings.fps,
-                "sdrHdrMode": 0,
+                "sdrHdrMode": isHdr ? 1 : 0,
                 "displayData": [
-                    "desiredContentMaxLuminance": 0,
+                    "desiredContentMaxLuminance": isHdr ? 1000 : 0,
                     "desiredContentMinLuminance": 0,
-                    "desiredContentMaxFrameAverageLuminance": 0,
+                    "desiredContentMaxFrameAverageLuminance": isHdr ? 500 : 0,
                 ],
                 "dpi": 100,
             ]],
@@ -175,8 +176,12 @@ private func buildSessionRequestBody(_ input: SessionCreateRequest) -> [String: 
                 ["key": "clientPhysicalResolution", "value": "{\"horizontalPixels\":\(width),\"verticalPixels\":\(height)}"],
                 ["key": "surroundAudioInfo", "value": "2"],
             ],
-            "sdrHdrMode": 0,
-            "clientDisplayHdrCapabilities": NSNull(),
+            "sdrHdrMode": isHdr ? 1 : 0,
+            "clientDisplayHdrCapabilities": isHdr ? [
+                "version": 1,
+                "hdrEdrSupportedFlagsInUint32": 1,
+                "staticMetadataDescriptorId": 0,
+            ] : NSNull(),
             "surroundAudioInfo": 0,
             "remoteControllersBitmap": 0,
             "clientTimezoneOffset": tzOffset,
@@ -193,7 +198,7 @@ private func buildSessionRequestBody(_ input: SessionCreateRequest) -> [String: 
                 "cloudGsync": false,
                 "enabledL4S": input.settings.enableL4S,
                 "mouseMovementFlags": 0,
-                "trueHdr": false,
+                "trueHdr": isHdr,
                 "supportedHidDevices": 0,
                 "profile": 0,
                 "fallbackToLogicalResolution": false,
@@ -204,7 +209,7 @@ private func buildSessionRequestBody(_ input: SessionCreateRequest) -> [String: 
                 "prefilterNoiseReduction": 0,
                 "hudStreamingMode": 0,
                 "sdrColorSpace": 2,
-                "hdrColorSpace": 0,
+                "hdrColorSpace": isHdr ? 4 : 0,
             ],
         ],
     ]

@@ -31,6 +31,7 @@ final class GFNSignalingClient {
     private let signalingUrl: String
     private let sessionId: String
     private let serverIp: String
+    private let resolution: String
 
     private var connection: NWConnection?
     private var heartbeatTask: Task<Void, Never>?
@@ -43,10 +44,11 @@ final class GFNSignalingClient {
 
     var onEvent: ((SignalingEvent) -> Void)?
 
-    init(signalingUrl: String, sessionId: String, serverIp: String = "") {
+    init(signalingUrl: String, sessionId: String, serverIp: String = "", resolution: String = "1920x1080") {
         self.signalingUrl = signalingUrl
         self.sessionId = sessionId
         self.serverIp = serverIp
+        self.resolution = resolution
         self.peerName = "peer-\(Int.random(in: 0..<10_000_000_000))"
     }
 
@@ -235,7 +237,7 @@ final class GFNSignalingClient {
                 "id": peerId,
                 "name": peerName,
                 "peerRole": 0,
-                "resolution": "1920x1080",
+                "resolution": resolution,
                 "version": 2,
             ],
         ])
