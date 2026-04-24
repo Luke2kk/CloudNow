@@ -370,8 +370,8 @@ final class InputSender {
 
     // Per-controller overlay trigger hold duration (ticks at 60 Hz)
     private var overlayHoldTicks: [Int: Int] = [:]
-    // ~1 s at 60 Hz
-    private static let overlayLongPressThreshold = 60
+    // 1800 ms at 60 Hz, matches official GFN IGO gamepadLongStartPressDefaultDuration
+    private static let overlayLongPressThreshold = 108
 
     init(channel: DataChannelSender) {
         self.channel = channel

@@ -11,7 +11,7 @@ private func gfnHeaders(token: String, clientId: String, deviceId: String, inclu
         "nv-client-id": clientId,
         "nv-client-streamer": "NVIDIA-CLASSIC",
         "nv-client-type": "NATIVE",
-        "nv-client-version": "2.0.80.173",
+        "nv-client-version": "2.0.83.130",
         "nv-device-make": "UNKNOWN",
         "nv-device-model": "UNKNOWN",
         "nv-device-os": "MACOS",
@@ -152,7 +152,7 @@ private func buildSessionRequestBody(_ input: SessionCreateRequest) -> [String: 
             "clientVersion": "30.0",
             "sdkVersion": "1.0",
             "streamerVersion": 1,
-            "clientPlatformName": "windows",
+            "clientPlatformName": "mac",
             "clientRequestMonitorSettings": [[
                 "widthInPixels": width,
                 "heightInPixels": height,

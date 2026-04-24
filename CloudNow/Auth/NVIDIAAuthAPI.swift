@@ -20,7 +20,7 @@ enum NVIDIAAuth {
     static let callbackScheme = "http"
 
     // Matches the official GFN PC client User-Agent so the NVIDIA backend accepts the token
-    static let userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 NVIDIACEFClient/HEAD/debb5919f6 GFN-PC/2.0.80.173"
+    static let userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 NVIDIACEFClient/HEAD/debb5919f6 GFN-PC/2.0.83.130"
 }
 
 // MARK: - PKCE Helpers
