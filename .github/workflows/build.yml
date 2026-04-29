@@ -1,0 +1,63 @@
+name: Build tvOS App
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build tvOS Archive
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Xcode version
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Fix Async Code Errors
+        run: |
+          # Fügt das fehlende 'await' vor den asynchronen Zugriffen in GamesViewModel.swift ein
+          sed -i '' 's/authManager.session?.provider.streamingServiceUrl/await authManager.session?.provider.streamingServiceUrl/g' CloudNow/UI/GamesViewModel.swift
+          sed -i '' 's/authManager.session?.user.userId/await authManager.session?.user.userId/g' CloudNow/UI/GamesViewModel.swift
+          echo "Code-Korrekturen angewendet."
+
+      - name: Resolve Package Dependencies
+        run: |
+          xcodebuild -workspace "CloudNow.xcodeproj/project.xcworkspace" \
+            -scheme "CloudNow" \
+            -resolvePackageDependencies
+
+      - name: Build and Archive App
+        run: |
+          xcodebuild archive \
+            -workspace "CloudNow.xcodeproj/project.xcworkspace" \
+            -scheme "CloudNow" \
+            -sdk appletvos \
+            -configuration Release \
+            -archivePath $PWD/build/App.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_ENTITLEMENTS="" \
+            CODE_SIGNING_IDENTITY="" \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            SWIFT_STRICT_CONCURRENCY=off \
+            -allowProvisioningUpdates
+
+      - name: Create IPA (Unsigned)
+        run: |
+          mkdir -p $PWD/build/Payload
+          find $PWD/build/App.xcarchive/Products/Applications -name "*.app" -exec cp -r {} $PWD/build/Payload/ \;
+          cd $PWD/build
+          zip -r CloudNow-tvOS.ipa Payload
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CloudNow-tvOS-Unsigned
+          path: build/CloudNow-tvOS.ipa
+          retention-days: 5
